@@ -175,12 +175,25 @@ def render fn [
     def w ((dim get "cols") otherwise 80)
     def hh ((dim get "rows") otherwise 24)
     def vh (MathUtil.max 1 ((hh) sub 3))
-    def midpane (if ((state get "mode") eq "help") [ help-pane ] [ tree-pane (tab) (vh) (w) ])
-    Tui.rows [
-      (tab-strip (state))
-      (midpane)
-      (status-bar (state) (tab))
-      (bottom-bar (state))
+    # Branch on the whole widget list rather than binding the middle
+    # pane from the `if`: an if-bound user-fn result consumed as a list
+    # element is the one shape the bytecode emitter refuses ("fn call
+    # operand of unknown provenance") — with the branch at this level,
+    # the entire app compiles (dx-report, bytecode status).
+    if ((state get "mode") eq "help") [
+      Tui.rows [
+        (tab-strip (state))
+        (help-pane)
+        (status-bar (state) (tab))
+        (bottom-bar (state))
+      ]
+    ] [
+      Tui.rows [
+        (tab-strip (state))
+        (tree-pane (tab) (vh) (w))
+        (status-bar (state) (tab))
+        (bottom-bar (state))
+      ]
     ]
   ]
 ]

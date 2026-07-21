@@ -445,12 +445,18 @@ must leave no residual value (`for` accumulates each iteration's
 results on the stack, so the watch metronome's value-yielding body both
 grew the stack by one entry per second and refused compilation with
 "result is a variadic loop value"). The live TUI under
-`--force-compile --compile-report` stamps 108 of its 110
-runtime-constructed callbacks to the VM; the two refusals are the view
-assemblers (`render`/`alice-render`, "fn call operand of unknown
-provenance" — a widget bound from an `if` and later evaluated), so only
-the outer per-frame assembly interprets while the row-rendering inner
-loops run compiled.
+`--force-compile --compile-report` now stamps **all 110** of its
+runtime-constructed callbacks to the VM — zero refusals — after
+isolating and designing out the one refusing shape: a def bound from an
+`if` whose branches are user-fn call results, later consumed as a list
+element, refuses as "fn call operand of unknown provenance" **even when
+both branches are identical calls** (reduced during this round; the
+same value passed as a module-wrapper argument compiles fine, so the
+gap is specific to if-joined user-call results reaching list elements /
+user-call operands). The view now branches on the whole widget list
+instead of binding the pane — one line of duplication for a fully
+compiled app. Upstream: teaching the emitter to resolve if-join
+provenance would remove the pattern constraint.
 
 ## Summary (this round)
 

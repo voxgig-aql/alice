@@ -14,8 +14,10 @@
 
 import "aql:test" end
 import "aql:io" end
+import "aql:string-util" end
 import "./viewer/alice.aql" end
 import "./viewer/alice-tabs.aql" end
+import "./viewer/alice-view.aql" end
 
 
 def _tmp-path "test/fixtures/.tmp-alice-app-watch.json"
@@ -229,6 +231,24 @@ def _boot fn [
   def st3 (_key (_key (st2) "j") "y")
   ".store = {…} 4 keys" (st3 get "msg") Assert.equal end
 ] "yank-to-message" Test.test end
+
+
+# --- the view renders every mode (widget trees are plain data) ------
+
+[
+  def st (_boot)
+  def wb (convert String (canon (AliceView.render (st))))
+  true (StringUtil.contains "aql file viewer" (wb)) Assert.equal end
+  def wh (convert String (canon (AliceView.render ((st) set mode "help"))))
+  true (StringUtil.contains "move focus" (wh)) Assert.equal end
+  true (StringUtil.contains "any key returns" (wh)) Assert.equal end
+  def st2 (_key (_type (_key (st) ":") "open test/fixtures/sample.json") "enter")
+  def wt (convert String (canon (AliceView.render (st2))))
+  true (StringUtil.contains "store" (wt)) Assert.equal end
+  true (StringUtil.contains "sample.json" (wt)) Assert.equal end
+  def wc (convert String (canon (AliceView.render ((st2) set mode "command"))))
+  true (StringUtil.contains "input" (wc)) Assert.equal end
+] "render-all-modes" Test.test end
 
 
 # --- summary --------------------------------------------------------
