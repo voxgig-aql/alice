@@ -454,15 +454,23 @@ after the join — "fn call operand of unknown provenance" — even with
 identical branches, and with a single consuming branch. The boundary is
 sharp: a scalar local survives the identical shape, the same map local
 survives without the `if`, and it survives when nothing reuses it after
-the join. The view now branches on the whole widget list instead of
-binding the pane — one line of duplication for a fully compiled app.
-Upstream this is now a pinned flip-ready test
-(`lang/go/bytecode_ifbranch_operand_test.go` + the
-design/COMPILABLE-SUBSET.md "pinned over-refusals" entry): the refusal
-cases assert today's behavior with fallback parity, the boundary
-controls assert the compiling neighbours, and the fix — reseating
-container operands across branch-body consumption — flips the former
-into the latter.
+the join. The view branches on the whole widget list instead of binding
+the pane — one line of duplication for a fully compiled app.
+
+**Fixed upstream** (on the aql branch this viewer tracks): the root
+cause was a branch-join provenance bug — an enclosing local merely READ
+inside both `if` arms is narrowed-through-use (identity-preserving), but
+`InstallJoinedDefs` re-seated it as a fresh-ID `JoinCarriers` result,
+stranding every later reference. `joinBranchDef` (eng/go/carrier.go) now
+keeps the shared ID when both arm carriers are the same identity (an
+identity no-op merge), so the binding's compile seat survives; a genuine
+reassignment (differing IDs) keeps the fresh-ID join. With the fix the
+pre-workaround `def midpane (if … [help-pane] [tree-pane …])` form
+compiles with zero refusals, so the widget-list branch is now optional
+(kept here because this viewer also runs on stock aql main, where the
+fix has yet to merge — it compiles cleanly either way). Pinned by
+`lang/go/bytecode_ifbranch_operand_test.go` and the
+design/COMPILABLE-SUBSET.md §2 branch-join narrow-preservation note.
 
 ## Summary (this round)
 
