@@ -20,8 +20,17 @@ From the repo root (imports are working-directory-relative):
 aql av.aql                 # welcome tab; open files with :open
 ```
 
-aql scripts cannot read command-line arguments (dx-report §9), so to
-open files straight from the shell:
+On an aql carrying the proposed `IO.args` word (see
+`proposals/script-argv-and-env.md`; implemented on the aql branch this
+viewer was developed against), files pass straight from the shell:
+
+```bash
+aql av.aql notes.json data.csv
+```
+
+On builds without it, released aql scripts cannot read command-line
+arguments (dx-report §9) — the launcher falls back to the welcome tab
+(`:open` from there), or use the `-e` form:
 
 ```bash
 aql -e 'import "./viewer/av.aql"  Av.run {files: ["test/fixtures/sample.json"]}'

@@ -3,13 +3,19 @@
 # Launch from the repo root:
 #   aql av.aql                # welcome tab; open files with :open
 #
-# aql scripts cannot read command-line arguments (see dx-report), so to
-# open files straight from the shell use `aql -e`:
+# On an aql with the proposed IO.args word (proposals/
+# script-argv-and-env.md), files can be passed straight from the shell:
+#   aql av.aql notes.json data.csv
+# On builds without it, IO.args is absent and this falls back to the
+# welcome tab (open files with :open, or use the -e form):
 #   aql -e 'import "./viewer/av.aql"  Av.run {files: ["test/fixtures/sample.json"]}'
 #
 # Full keymap: press ? inside, or see viewer/README.md.
 
+import "aql:io"
 import "./viewer/av.aql"
 
+def _cli-files (do [ IO.args ] error [ drop [] ])
+
 # Bind the final state so it does not auto-print after quit.
-def _final (Av.run {})
+def _final (Av.run {files: (_cli-files)})
