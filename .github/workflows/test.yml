@@ -16,7 +16,7 @@ env:
   # aql-lang/aql @ main, 2026-06-24 (PR #182, claude/aql-client-issues-6b8new).
   # Pinned to the exact commit this module is verified against — the build
   # where all five suites interpret, check (0 errors), and compile clean.
-  AQL_REF: 7b1a4fbdd4cc0b93966a660d642416e714c02b98
+  AQL_REF: 618562025d9e0154107306927911a8b1b046333c
 
 jobs:
   test:
@@ -55,7 +55,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/bin"
           cd aql-src/cmd/go
-          GOFLAGS=-mod=mod go build \
+          GOWORK=off GOFLAGS=-mod=mod go build \
             -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${AQL_REF}" \
             -o "$HOME/.local/bin/aql" ./aql
 
