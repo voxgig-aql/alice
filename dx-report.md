@@ -447,16 +447,22 @@ grew the stack by one entry per second and refused compilation with
 "result is a variadic loop value"). The live TUI under
 `--force-compile --compile-report` now stamps **all 110** of its
 runtime-constructed callbacks to the VM — zero refusals — after
-isolating and designing out the one refusing shape: a def bound from an
-`if` whose branches are user-fn call results, later consumed as a list
-element, refuses as "fn call operand of unknown provenance" **even when
-both branches are identical calls** (reduced during this round; the
-same value passed as a module-wrapper argument compiles fine, so the
-gap is specific to if-joined user-call results reaching list elements /
-user-call operands). The view now branches on the whole widget list
-instead of binding the pane — one line of duplication for a fully
-compiled app. Upstream: teaching the emitter to resolve if-join
-provenance would remove the pattern constraint.
+isolating and designing out the one refusing shape, since fully reduced
+to its law: a **Map-typed local consumed by a user-fn call inside an
+`if` branch** loses its operand provenance for any later user-fn call
+after the join — "fn call operand of unknown provenance" — even with
+identical branches, and with a single consuming branch. The boundary is
+sharp: a scalar local survives the identical shape, the same map local
+survives without the `if`, and it survives when nothing reuses it after
+the join. The view now branches on the whole widget list instead of
+binding the pane — one line of duplication for a fully compiled app.
+Upstream this is now a pinned flip-ready test
+(`lang/go/bytecode_ifbranch_operand_test.go` + the
+design/COMPILABLE-SUBSET.md "pinned over-refusals" entry): the refusal
+cases assert today's behavior with fallback parity, the boundary
+controls assert the compiling neighbours, and the fix — reseating
+container operands across branch-body consumption — flips the former
+into the latter.
 
 ## Summary (this round)
 
