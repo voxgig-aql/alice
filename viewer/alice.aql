@@ -95,10 +95,13 @@ def has-ctrl fn [
 # app: send to an unregistered "tui" raises, ending the loop body.
 def alice-metronome fn [
   [] [Integer] [
+    # The body leaves no residual value: `for` accumulates each
+    # iteration's results on the stack, so a value-yielding body would
+    # grow it by one entry per second (and its variadic result refuses
+    # bytecode compilation).
     for 1000000000 [
       TimeUtil.sleep 1000
       send {tag: "tick"} "tui"
-      0
     ]
     0
   ]

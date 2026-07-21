@@ -436,6 +436,22 @@ surfaces only hard read/parse errors.
   with no terminal. Pattern recommended for any aql:tui app (an
   AQL-reachable virtual backend would still be better — see proposal).
 
+## Bytecode status (this round)
+
+All seven alice suites — including the headless app-integration suite —
+run **fully compiled** under `aql --force-compile`, byte-identical to
+the interpreter, after one fix this round surfaced: a `for`-loop body
+must leave no residual value (`for` accumulates each iteration's
+results on the stack, so the watch metronome's value-yielding body both
+grew the stack by one entry per second and refused compilation with
+"result is a variadic loop value"). The live TUI under
+`--force-compile --compile-report` stamps 108 of its 110
+runtime-constructed callbacks to the VM; the two refusals are the view
+assemblers (`render`/`alice-render`, "fn call operand of unknown
+provenance" — a widget bound from an `if` and later evaluated), so only
+the outer per-frame assembly interprets while the row-rendering inner
+loops run compiled.
+
 ## Summary (this round)
 
 | # | Severity | Issue | Status |
