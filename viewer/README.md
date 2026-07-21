@@ -7,10 +7,10 @@ multiple open files and a **watch** mode that reloads changed files
 while keeping your place.
 
 Verified against `aql-lang/aql` **main @ `c1d2a1a`** (2026-07-20). The
-viewer deliberately tracks aql main, unpinned — the TUI stack it rides
-on landed 2026-07-17 and predates no release; the pinned build the
-Bloom library uses (`7b1a4fb`) cannot run it. A "last verified" commit
-is recorded here instead of a pin.
+viewer deliberately tracks aql main, unpinned — the `aql:tui` stack it
+rides on landed upstream on 2026-07-17, well after the pinned build the
+Bloom library uses (`7b1a4fb`), which therefore cannot run it. A "last
+verified" commit is recorded here instead of a pin.
 
 ## Launch
 
@@ -20,7 +20,7 @@ From the repo root (imports are working-directory-relative):
 aql av.aql                 # welcome tab; open files with :open
 ```
 
-aql scripts cannot read command-line arguments (dx-report §5), so to
+aql scripts cannot read command-line arguments (dx-report §9), so to
 open files straight from the shell:
 
 ```bash
@@ -99,7 +99,7 @@ dx-report §6.
 ## Deviations from jless (v1)
 
 - Map keys display in **sorted order** — aql maps sort their keys;
-  source order is not preserved (dx-report §8).
+  source order is not preserved (dx-report §12).
 - Strings render aql-style (`'single-quoted'`, via `canon`), not JSON
   double-quoted.
 - No line mode (`m`/`%`), no clipboard yank (aql has no subprocess or
