@@ -270,10 +270,27 @@ asserts none errors or disagrees. Run it with:
 test/divergence/run.sh
 ```
 
-It builds a newer aql (the `--compile` CLI postdates this module's pin) and
-prints a per-suite interpreter/check/bytecode matrix. All five suites are
+It builds its own aql at the same pinned ref as the library (CI enforces
+the two stay equal) and prints a per-suite interpreter/check/bytecode
+matrix. All five suites are
 green on all three. See [`test/divergence/README.md`](../test/divergence/README.md)
 for the one upstream byte-compiler bug this guards against (a compiled
 `each` body drops a *block-local* binding) and the one-line structural
 choice — building a bulk fixture at top level — that keeps the suites clear
 of it.
+
+
+## Run the av file viewer
+
+The repo also ships `av` — a jless-style TUI viewer for every format aql
+parses, with tabs and watch-reload, written in AQL. It needs an aql built
+from **latest main** (the `aql:tui` stack postdates this library's pinned
+build): follow [Install and run aql](#install-and-run-aql) but check out
+`main` instead of the pin, then, from the repo root:
+
+```bash
+aql av.aql        # welcome tab; open files with  :open <path> [kind]
+```
+
+Keymap, watch semantics, and headless testing notes:
+[../viewer/README.md](../viewer/README.md).

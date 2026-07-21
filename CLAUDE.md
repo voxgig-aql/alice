@@ -24,11 +24,17 @@ mistakes to avoid. Every example there is verified against the pinned
   prints `all green`.
 - `test/divergence/run.sh` runs every suite through all three aql surfaces —
   interpreter, `aql check`, and the byte compiler (`aql --compile`) — and
-  asserts none errors or disagrees. It builds a newer aql than this module's
-  pin, since the `--compile` CLI postdates it. See its `README.md`; the
-  byte-compiler bug it guards against is `dx-report.md` §3.
+  asserts none errors or disagrees. It pins the same aql ref as the library
+  (historically it ran a newer one, before the pin caught up). See its
+  `README.md`; the byte-compiler bug it guards against is `dx-report.md` §3.
 - Known AQL-runtime gotchas observed with the pinned build are in
   `dx-report.md`. The pinned aql commit is single-sourced in the CI workflow's
   `AQL_REF` (`.github/workflows/test.yml`); a CI `consistency` job fails if the
   hook, `test/divergence/run.sh`, or `api.json` drift from it.
+- `viewer/` + `av.aql` is a separate deliverable: the `av` TUI file viewer
+  (jless-style; tabs; watch-reload), written in AQL against aql **main** —
+  NOT the library pin, which predates the `aql:tui` stack it needs. Build
+  aql from latest main to run/develop it; its conventions and keymap are in
+  `viewer/README.md`, its runtime findings are the 2026-07-21 round of
+  `dx-report.md`, and CI runs its suites in the `viewer` job.
 - Forking this repo to start a new AQL library? See `TEMPLATE.md`.

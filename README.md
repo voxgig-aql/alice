@@ -98,7 +98,11 @@ test/bloom_prop_spec.aql   property-based tests — declarative spec format
 test/bloom_smoke_test.aql  end-to-end smoke run over every public word
 docs/                      Diátaxis documentation (above)
 dx-report.md               developer-experience notes (current pin: aql @ 7b1a4fb)
-proposals/                 language proposals raised from this module's DX
+proposals/                 language proposals raised from this repo's DX
+av.aql + viewer/           av — a jless-style TUI file viewer written in
+                           AQL (tabs, watch-reload); see viewer/README.md.
+                           Tracks aql MAIN, unlike the pinned library.
+test/av_*.aql              the viewer's suites (+ test/fixtures/)
 ```
 
 Test files follow a consistent naming convention: `_test.aql` for
@@ -123,6 +127,14 @@ A GitHub Actions workflow
 ([`.github/workflows/test.yml`](.github/workflows/test.yml)) builds aql from a
 pinned commit and runs every suite — plus a `consistency` job (agent-skill
 drift, JSON manifests, and a pinned-ref guard) — on each push and pull request.
+A separate `viewer` job builds the latest aql *main* and runs the `av`
+viewer's suites (the viewer needs the `aql:tui` stack, which postdates the
+library's pin — see [viewer/README.md](viewer/README.md)):
+
+```bash
+aql av.aql                     # the viewer itself (any terminal)
+aql test/av_app_unit_test.aql  # …and its headless integration suite
+```
 
 ## License
 

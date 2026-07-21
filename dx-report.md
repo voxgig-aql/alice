@@ -256,3 +256,196 @@ this module's history):
 | 1 | 🟡 | `print` forward-collection reverses/breaks | unchanged (3rd report) |
 | 2 | ✅ | `aql check`: false `mul` no_signature + export-map `unused_def` | **resolved** on `7b1a4fb` (0 errors; gating-ready) |
 | 3 | ✅ | bytecode `--compile` block-local `each`-body divergence (+ two 2026-06-23 `main` regressions) | **fixed** upstream `f247557`/`fc47452`; harness pin moved to aql `407feda` |
+
+
+---
+
+# 2026-07-21 round: the `av` viewer on aql main @ `c1d2a1a`
+
+**AQL build under test:** `aql-lang/aql` @ `c1d2a1a` (main, 2026-07-20),
+built from source in-workspace (`cd cmd/go && go build ./aql`; note
+`GOFLAGS=-mod=mod` now *fails* inside the aql workspace — "-mod may only
+be set to readonly or vendor when in workspace mode" — the flag is only
+for standalone clones).
+**Context:** building `viewer/` — a jless-style TUI file viewer with
+tabs and watch-reload, written in AQL on the freshly-landed `aql:tui`
+stack (upstream 2026-07-17). First real-world exercise of `aql:tui`,
+`aql:io` watching, the actor words, and deep cross-module call chains
+from this repo. Everything below was hit while making the viewer work;
+each verdict was isolated with a minimal repro where one exists. The
+five viewer suites plus the headless app-integration suite are green on
+this build; the Bloom library and its pin are untouched.
+
+## New issues
+
+### 5. 🔴 `def` from a call can silently fail to bind in deep call chains
+
+In an update-loop chain (fn → `case` arm → fn → fn, as driven by
+`Tui.run` or an equivalent fold), a `def` whose value is a call to a
+**local alias fn** (a one-line wrapper around another module's export)
+or to a **recursive fn** completes without binding — no error at the
+def, then the *next* statement raises `undefined_word` for the name:
+
+```aql
+def with-active fn [[state:Map tab:Map] [Map] [ AvTabs.put-active state (tab) ]]
+# inside a case arm several frames deep:
+def s3 (with-active (s2) (tabw))     # completes, binds NOTHING
+def err ((AvTabs.active (s3)) …)     # [aql/undefined_word]: s3
+```
+
+Replacing the alias with the direct module call (`def s3
+(AvTabs.put-active (s2) (tabw))`) binds correctly; converting recursive
+helpers (`add-ancestors`, `surviving-anchor`) to `fold`s fixed the same
+failure in `AvTabs.reanchor`/`reveal`. The same shapes work when called
+from a test body or the top level — only the deep chain misbinds, so a
+green unit suite does not protect the composed program. Every viewer
+module now avoids local alias fns and recursion in state-machinery as a
+matter of policy. Not reduced to a standalone repro (context-sensitive);
+the pre-fix shapes are in this repo's git history
+(`viewer/av.aql`/`av-tabs.aql` before 7c6f739).
+
+### 6. 🔴 `IO.watch` callbacks are never delivered while `Tui.run` runs
+
+A watch registered from inside a `Tui.run` update never fires its body:
+no callback, no `send`, nothing — while the *identical* registration in
+a headless script delivers within milliseconds. Repro pair:
+
+```aql
+# headless: fires (op=write lands in /tmp/av-fire.txt)
+def fire fn [[ev:Map] [Integer] [ IO.write (make Pathon "/tmp/av-fire.txt") "hit" end drop 0 ]]
+IO.watch (make Pathon ".") [fire] {match: "w.json"}
+IO.write (make Pathon "./w.json") "{}" end drop
+TimeUtil.sleep 800
+```
+
+The same `IO.watch` call made during a `Tui.run` update (the handle is
+live, `Watcher(W_…)`) never runs `[fire]` for external writes to the
+watched directory. Presumably the callback's concurrent fork needs the
+runtime that registered it, and the TUI driver owns it while parked on
+the mailbox. Since the whole point of watching in a TUI is reacting
+while the loop is parked, `aql:tui` + `IO.watch` currently cannot be
+combined. **Workaround (shipped):** a spawned metronome process
+(`spawn` + `TimeUtil.sleep` + `send {tag:"tick"} "tui"` — this path
+works perfectly) with mtime+size polling in `update`.
+
+### 7. 🔴 User multi-signature fn dispatch loses a value's concrete type
+
+A multi-sig fn (`[v:Map]…[v:List]…[v:Any]…` overloads) picks its `Any`
+overload for a genuine Map when the value arrives through an Any param
+inside a call chain that originates in an `each` body — and in some
+cross-module chains (a value loaded in module A, dispatched by module
+B's internal overloads). Native words (`is`, `get`, `keys`) see the
+true type in the same positions. Minimal repro:
+
+```aql
+def nk fn [ [v:Map] [String] ["map"] [v:Any] [String] ["leaf"] ]
+def hop fn [[cv:Any] [String] [ nk (cv) ]]
+def doc {meta: {age: 36}}
+print (hop ((doc) get "meta"))                                  # map ✓
+print (each [ var [[k] (hop ((doc) get (k))) ] ] (keys (doc)))  # ["leaf"] ✗
+```
+
+**Workaround (shipped):** type dispatch in shared data-plumbing uses
+single-sig fns with native `is`-chains (`viewer/av-doc.aql`
+`node-kind`/`get-seg`/`has-seg`); multi-sig overloads only where the
+dispatch happens directly on an expression at the call site.
+
+### 8. 🟡 A map literal returned from an fn body evaluates after teardown
+
+`fn [[a:Integer b:Integer] [Map] [ {x: (b)} ]]` raises
+`undefined_word: b` at call time: the returned map literal's `(…)`
+values evaluate only after the call's params are gone (body-local defs
+survive; params do not). **Workaround:** bind first — `def out {x:
+(b)} out`. Used everywhere in `viewer/`.
+
+### 9. 🟡 No script argv (and no env access)
+
+`aql script.aql a b c` silently ignores `a b c` (the CLI reads only the
+script path), and no word exposes environment variables. A CLI tool
+written in AQL cannot receive "which file to open" from its command
+line — the viewer's launch story is `aql av.aql` + `:open`, or an
+`aql -e 'import … Av.run {files:[…]}'` one-liner. RFC:
+`proposals/script-argv-and-env.md`.
+
+### 10. 🟡 Checker friction: several false-error shapes gate execution
+
+Plain `aql X` refuses to run on check *errors*, and these check-only
+shapes all came up while building the viewer (workarounds in
+parentheses; all shipped in `viewer/`):
+
+- `is`-guarded branches don't narrow: `get`/`has` on a checker-typed
+  disjunct is an error even though the branch guards it (→ overloads or
+  is-chains behind an `[Any]` fn).
+- A fold's accumulator is typed as the *element* type, so map-shaped
+  accumulators error (→ restructure; see also §11).
+- An IO-word result binds as an unresolved partial when an arg type
+  mismatches — `IO.read "s"` needs `(make Pathon s)`; the follow-on
+  errors ("cannot call `x`") point at every *use* of the binding.
+- `convert String x` needs a statically-Scalar `x`; an Any-typed name
+  inside `${…}` is treated as a zero-arg call (→ tiny typed coercion
+  helpers `as-str`/`as-int`, typed accessors like `row-at`).
+- `aql check viewer/av-nav.aql` from the repo root can't resolve the
+  module's sibling `./av-doc.aql` import — a top-level *script*'s
+  imports are CWD-relative; only *imported* modules resolve against
+  their own directory (→ check intra-package modules from `viewer/`, or
+  check the root launcher, which exercises the whole tree).
+
+### 11. 🟡 `fold`'s var binding order contradicts its description
+
+`describe fold` says "the accumulator is pushed first", and bloom-era
+code reads `var [[acc x]]` — but the element is on *top*, so
+`var [[a b]]` binds `a` = element, `b` = accumulator:
+
+```aql
+print (fold [ var [[a b] (a) ]] ["elem"] "init")   # elem — a is the ELEMENT
+```
+
+Commutative folds (`add`) mask the swap; anything asymmetric silently
+computes garbage. The viewer's folds all read `var [[elem acc]]`.
+
+### 12. 🟢 Map key order is always sorted
+
+`{b:1, a:2}` stores, prints, and iterates as `a, b` — source order is
+unrecoverable, so a JSON viewer cannot show keys in file order (jless
+does). Documented as a viewer deviation.
+
+### 13. 🟢 jsonic-family leniency swallows truncation
+
+`{"a": 1, "b": ` parses without error to `{a:1, b:null}` on the
+`json`/`jsonic` paths — a malformed file "loads fine" with partial
+content. There is no strict mode on the `IO.read` formats. The viewer
+surfaces only hard read/parse errors.
+
+## What worked well (worth keeping)
+
+- **`IO.read` is a one-stop loader**: extension-inferred parsing over
+  the whole tabnas family (plus `{fmt}` override, `{field:
+  {separation:"\t"}}` for CSV variants — the "no tsv parse kind" gap in
+  earlier planning was wrong at the IO.read level; only the `parse`
+  word's kind set lacks it). `viewer/av-fmt.aql` is ~40 lines because
+  of this.
+- **The `aql:tui` core held up**: alt-screen, diffed rendering, widget
+  layout, key decoding, `Tui.quit`, and the "any mailbox message folds
+  through update" contract all behaved exactly as specified —
+  `send {…} "tui"` from a spawned process is a reliable event source.
+- **`canon` is the right display serializer** (no HTML escaping, smart
+  quote switching, `none`/numbers/bools render cleanly).
+- **Headless TUI testing via an exported feed word**: exporting the
+  update fold (`Av.feed`) lets a plain test suite drive the real app —
+  command mode, tabs, search, watch-reload against real disk writes —
+  with no terminal. Pattern recommended for any aql:tui app (an
+  AQL-reachable virtual backend would still be better — see proposal).
+
+## Summary (this round)
+
+| # | Severity | Issue | Status |
+|---|----------|-------|--------|
+| 5 | 🔴 | silent `def`-binding failure in deep call chains (alias fns, recursion) | open; policy workaround |
+| 6 | 🔴 | `IO.watch` callbacks starved under `Tui.run` | open; metronome+poll workaround |
+| 7 | 🔴 | multi-sig dispatch degrades through Any params in each/cross-module chains | open; is-chain workaround |
+| 8 | 🟡 | returned map literal evaluates after param teardown | open; def-then-return |
+| 9 | 🟡 | no script argv / env access | open; RFC filed |
+| 10 | 🟡 | checker false-error shapes gate `aql X` | open; typed-helper idioms |
+| 11 | 🟡 | fold var order contradicts docs | open; element-first idiom |
+| 12 | 🟢 | map keys always sorted | by design? documented |
+| 13 | 🟢 | lenient parsing swallows truncation | by design; documented |

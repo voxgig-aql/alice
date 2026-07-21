@@ -1,0 +1,60 @@
+  # The av viewer (viewer/) deliberately tracks aql MAIN, unpinned: the
+  # aql:tui stack it is built on (landed 2026-07-17) postdates the
+  # library's pinned build, which cannot run it. This job builds the
+  # latest main per run — an upstream regression can therefore break it
+  # independently of the pinned `test` job; that is the accepted
+  # trade-off (viewer/README.md records the last verified commit).
+  viewer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out bloom-filter
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Check out aql source (main)
+        uses: actions/checkout@v4
+        with:
+          repository: aql-lang/aql
+          ref: main
+          path: aql-src
+
+      - name: Build aql (main)
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          cd aql-src/cmd/go
+          GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/aql" ./aql
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/aql" -version
+
+      - name: Static check (viewer modules + launcher + suites)
+        run: |
+          aql check av.aql
+          cd viewer
+          for f in av-fmt.aql av-doc.aql av-nav.aql av-tabs.aql av-view.aql av.aql; do
+            aql check "$f"
+          done
+
+      - name: Unit suite — av-fmt
+        run: aql test/av_fmt_unit_test.aql
+
+      - name: Unit suite — av-doc
+        run: aql test/av_doc_unit_test.aql
+
+      - name: Property suite — av-doc
+        run: aql test/av_doc_prop_test.aql
+
+      - name: Unit suite — av-nav
+        run: aql test/av_nav_unit_test.aql
+
+      - name: Unit suite — av-tabs
+        run: aql test/av_tabs_unit_test.aql
+
+      - name: Headless app integration suite
+        run: aql test/av_app_unit_test.aql
+
+      - name: Fixtures smoke
+        run: aql test/av_smoke_test.aql
