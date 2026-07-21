@@ -28,7 +28,7 @@ fails on the repo's replace directives):
 ```bash
 git clone https://github.com/aql-lang/aql /tmp/aql-source
 cd /tmp/aql-source
-git checkout 7b1a4fbdd4cc0b93966a660d642416e714c02b98   # the commit CI pins (.github/workflows/test.yml AQL_REF)
+git checkout 618562025d9e0154107306927911a8b1b046333c   # the commit CI pins (.github/workflows/test.yml AQL_REF)
 cd cmd/go
 GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/aql" ./aql
 ```
@@ -45,7 +45,7 @@ Run any script in this repo by passing its path:
 aql test/bloom_smoke_test.aql
 ```
 
-This module is verified against aql commit `7b1a4fb`; the CI workflow
+This module is verified against aql commit `6185620`; the CI workflow
 (`.github/workflows/test.yml`) pins the same commit.
 
 ---
