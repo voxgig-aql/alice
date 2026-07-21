@@ -1,21 +1,21 @@
-# av — an aql file viewer (jless-style), with tabs and file watching.
+# alice — an aql file viewer (jless-style), with tabs and file watching.
 #
 # Launch from the repo root:
-#   aql av.aql                # welcome tab; open files with :open
+#   aql alice.aql                # welcome tab; open files with :open
 #
 # On an aql with the proposed IO.args word (proposals/
 # script-argv-and-env.md), files can be passed straight from the shell:
-#   aql av.aql notes.json data.csv
+#   aql alice.aql notes.json data.csv
 # On builds without it, IO.args is absent and this falls back to the
 # welcome tab (open files with :open, or use the -e form):
-#   aql -e 'import "./viewer/av.aql"  Av.run {files: ["test/fixtures/sample.json"]}'
+#   aql -e 'import "./viewer/alice.aql"  Alice.run {files: ["test/fixtures/sample.json"]}'
 #
 # Full keymap: press ? inside, or see viewer/README.md.
 
 import "aql:io"
-import "./viewer/av.aql"
+import "./viewer/alice.aql"
 
 def _cli-files (do [ IO.args ] error [ drop [] ])
 
 # Bind the final state so it does not auto-print after quit.
-def _final (Av.run {files: (_cli-files)})
+def _final (Alice.run {files: (_cli-files)})

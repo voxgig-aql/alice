@@ -1,4 +1,4 @@
-# av-tabs: tab records and tab-set operations for the av viewer, plus
+# alice-tabs: tab records and tab-set operations for the alice viewer, plus
 # the reload re-anchor algorithm. Pure — no terminal or watcher words
 # (the shell owns IO.watch handles; this module only stores them).
 #
@@ -8,7 +8,7 @@
 #     path: String           the file path as opened
 #     kind: String           format kind actually used
 #     doc: Any               parsed document ([] when load failed)
-#     rows, focus, scroll, xoff, pending   view state (see av-nav)
+#     rows, focus, scroll, xoff, pending   view state (see alice-nav)
 #     watch: Boolean         auto-reload on change?
 #     watcher: Any           IO.watch handle (none when not watching)
 #     err: String|None       load/reload error, shown in the status bar
@@ -16,16 +16,16 @@
 #     gen: Integer           reload generation counter
 #     text: Boolean          raw-text (line list) document? }
 #
-# Public surface (the AvTabs namespace exported at the bottom):
+# Public surface (the AliceTabs namespace exported at the bottom):
 #
-#   AvTabs.make id path opts        → Map      load a file into a fresh tab
-#   AvTabs.open state path opts     → Map      append + activate a new tab
-#   AvTabs.close state              → Map      drop the active tab
-#   AvTabs.activate state n        → Map      clamp-activate tab n
-#   AvTabs.next state / prev state → Map      cycle activation
-#   AvTabs.active state             → Map      the active tab
-#   AvTabs.put-active state tab     → Map      store an updated active tab
-#   AvTabs.reanchor tab res vh      → Map      fold a reload result in,
+#   AliceTabs.make id path opts        → Map      load a file into a fresh tab
+#   AliceTabs.open state path opts     → Map      append + activate a new tab
+#   AliceTabs.close state              → Map      drop the active tab
+#   AliceTabs.activate state n        → Map      clamp-activate tab n
+#   AliceTabs.next state / prev state → Map      cycle activation
+#   AliceTabs.active state             → Map      the active tab
+#   AliceTabs.put-active state tab     → Map      store an updated active tab
+#   AliceTabs.reanchor tab res vh      → Map      fold a reload result in,
 #                                              retaining the view position
 #
 # The re-anchor algorithm (reload with retained position):
@@ -38,20 +38,20 @@
 
 
 import "aql:math-util"
-import "./av-fmt.aql"
-import "./av-doc.aql"
+import "./alice-fmt.aql"
+import "./alice-doc.aql"
 
 
 # --- construction ----------------------------------------------------
 
 def mk-tab fn [
   [id:Integer path:String opts:Map] [Map] [
-    def res (AvFmt.load path opts)
+    def res (AliceFmt.load path opts)
     def ok (res get "ok")
     def doc (if (ok) [ res get "doc" ] [ [] ])
     def out {
       id: (id), path: (path), kind: (res get "kind"), doc: (doc),
-      rows: (AvDoc.top (doc)), focus: 0, scroll: 0, xoff: 0, pending: "",
+      rows: (AliceDoc.top (doc)), focus: 0, scroll: 0, xoff: 0, pending: "",
       watch: false,
       err: (if (ok) [ none ] [ res get "err" ]),
       gone: false, gen: 0, text: ((res get "text") otherwise false),
@@ -145,7 +145,7 @@ def surviving-anchor fn [
     def n (size (p))
     def best (fold [ var [[j acc]
       if ((acc) gte 0) [ (acc) ] [
-        if (AvDoc.has-path doc (take (j) p)) [ (j) ] [ -1 ]
+        if (AliceDoc.has-path doc (take (j) p)) [ (j) ] [ -1 ]
       ]
     ]] (reverse (range 0 ((n) add 1) 1)) -1)
     take (if ((best) lt 0) [ 0 ] [ (best) ]) p
@@ -157,17 +157,17 @@ def surviving-anchor fn [
 def add-ancestors fn [
   [exps:Map p:List] [Map] [
     fold [ var [[j acc]
-      (acc) set (AvDoc.path-key (take (j) p)) true
+      (acc) set (AliceDoc.path-key (take (j) p)) true
     ]] (range 0 (size (p)) 1) (exps)
   ]
 ]
 
 def index-of-path fn [
   [rows:List p:List] [Integer] [
-    def want (AvDoc.path-key (p))
+    def want (AliceDoc.path-key (p))
     fold [ var [[j acc]
       if ((acc) gte 0) [ (acc) ] [
-        if ((AvDoc.path-key ((rows get (j)) get "path")) eq (want)) [ (j) ] [ -1 ]
+        if ((AliceDoc.path-key ((rows get (j)) get "path")) eq (want)) [ (j) ] [ -1 ]
       ]
     ]] (range 0 (size (rows)) 1) -1
   ]
@@ -187,13 +187,13 @@ def reanchor fn [
       def anchor (row-path (rows get fx))
       def line ((fx) sub (tab get "scroll"))
       def exps (fold [ var [[rw acc]
-        if ((rw get "open") and (AvDoc.has-path (doc2) (rw get "path"))) [
-          (acc) set (AvDoc.path-key (rw get "path")) true
+        if ((rw get "open") and (AliceDoc.has-path (doc2) (rw get "path"))) [
+          (acc) set (AliceDoc.path-key (rw get "path")) true
         ] [ (acc) ]
       ]] (rows) {})
       def anc (surviving-anchor (doc2) (anchor))
       def exps2 (add-ancestors (exps) (anc))
-      def rows2 (AvDoc.rebuild (doc2) (exps2))
+      def rows2 (AliceDoc.rebuild (doc2) (exps2))
       def n2 (size (rows2))
       def fx2 (clampi (index-of-path (rows2) (anc)) 0 ((n2) sub 1))
       def maxsc (clampi ((n2) sub (vh)) 0 (n2))
@@ -212,8 +212,8 @@ def reanchor fn [
 # the window on it (used by search and n/N cycling).
 def reveal fn [
   [tab:Map p:List vh:Integer] [Map] [
-    def exps (add-ancestors (AvDoc.expanded-of (tab get "rows")) (p))
-    def rows2 (AvDoc.rebuild (tab get "doc") (exps))
+    def exps (add-ancestors (AliceDoc.expanded-of (tab get "rows")) (p))
+    def rows2 (AliceDoc.rebuild (tab get "doc") (exps))
     def n2 (size (rows2))
     def fx (clampi (index-of-path (rows2) (p)) 0 ((n2) sub 1))
     def maxsc (clampi ((n2) sub (vh)) 0 (n2))
@@ -223,7 +223,7 @@ def reveal fn [
 ]
 
 
-export "AvTabs" {
+export "AliceTabs" {
   reveal: reveal/r
   make: mk-tab/r
   open: open-tab/r

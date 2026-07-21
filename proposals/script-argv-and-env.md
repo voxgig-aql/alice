@@ -3,7 +3,7 @@
 **Status:** Draft (an upstream implementation of the argv half is being
 attempted on `aql-lang/aql` branch `claude/aql-file-viewer-tui-4mf69t`).
 **Target:** `aql-lang/aql` CLI (`cmd/go`) + `aql:io` module.
-**Provenance:** surfaced while building this repo's `viewer/` (the `av`
+**Provenance:** surfaced while building this repo's `viewer/` (the `alice`
 TUI file viewer); recorded as **§9** in the 2026-07-21 round of
 [`dx-report.md`](../dx-report.md).
 **Build referenced:** `aql @ c1d2a1a` (main, 2026-07-20).
@@ -13,18 +13,18 @@ TUI file viewer); recorded as **§9** in the 2026-07-21 round of
 An AQL script cannot find out how it was invoked:
 
 ```bash
-aql av.aql notes.json          # notes.json is silently ignored
+aql alice.aql notes.json          # notes.json is silently ignored
 ```
 
 The CLI's run path consumes only the script path (`fs.Arg(0)`); extra
 positionals vanish without a diagnostic. There is also no word exposing
 environment variables. Together this means a command-line *tool*
 written in AQL — exactly what `aql:tui` now invites — has no channel to
-receive a file name, a flag, or `$HOME` from its caller. The `av`
+receive a file name, a flag, or `$HOME` from its caller. The `alice`
 viewer ships with this launch story instead:
 
 ```bash
-aql -e 'import "./viewer/av.aql"  Av.run {files: ["notes.json"]}'
+aql -e 'import "./viewer/alice.aql"  Alice.run {files: ["notes.json"]}'
 ```
 
 which works but is nobody's idea of a CLI. (The `args` word is

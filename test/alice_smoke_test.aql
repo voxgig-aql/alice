@@ -1,16 +1,16 @@
-# av viewer smoke test: every fixture format loads through AvFmt and
-# renders rows through AvDoc without an error. No assertions — like
+# alice viewer smoke test: every fixture format loads through AliceFmt and
+# renders rows through AliceDoc without an error. No assertions — like
 # test/bloom_smoke_test.aql, a clean end-to-end run is the pass.
 #
 # Run from the repo root:
-#   aql test/av_smoke_test.aql
+#   aql test/alice_smoke_test.aql
 
 
-import "./viewer/av-fmt.aql" end
-import "./viewer/av-doc.aql" end
+import "./viewer/alice-fmt.aql" end
+import "./viewer/alice-doc.aql" end
 
 
-print "--- av viewer smoke: load + rows for every fixture ---"
+print "--- alice viewer smoke: load + rows for every fixture ---"
 
 def _fixtures [
   "sample.json", "sample.jsonic", "sample.json5", "sample.jsonc",
@@ -20,21 +20,21 @@ def _fixtures [
 ]
 
 def _walk (each [ var [[nm]
-  def res (AvFmt.load `test/fixtures/${nm}` {})
-  def rows (if (res get "ok") [ AvDoc.top (res get "doc") ] [ [] ])
+  def res (AliceFmt.load `test/fixtures/${nm}` {})
+  def rows (if (res get "ok") [ AliceDoc.top (res get "doc") ] [ [] ])
   # expand the first expandable child row, then render every visible
   # row's key and value strings — the per-frame work the viewer does
-  def rows2 (if ((size (rows)) gt 1) [ AvDoc.expand (res get "doc") (rows) 1 ] [ (rows) ])
+  def rows2 (if ((size (rows)) gt 1) [ AliceDoc.expand (res get "doc") (rows) 1 ] [ (rows) ])
   def lines (each [ var [[rw]
-    `${(AvDoc.key-str (rw))}=${(AvDoc.value-str (res get "doc") (rw))}`
+    `${(AliceDoc.key-str (rw))}=${(AliceDoc.value-str (res get "doc") (rw))}`
   ]] (rows2))
   print (`${nm}: kind=${(res get "kind")} rows=${(size (rows2))}`)
   0
 ]] (_fixtures))
 
 print "--- search sweep over the json fixture ---"
-def _res (AvFmt.load "test/fixtures/sample.json" {})
-def _hits (AvDoc.search (_res get "doc") "title")
+def _res (AliceFmt.load "test/fixtures/sample.json" {})
+def _hits (AliceDoc.search (_res get "doc") "title")
 print (`title hits: ${(size (_hits))}`)
 
 print "all green"

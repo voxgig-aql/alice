@@ -2,7 +2,7 @@
 
 **Status:** Draft.
 **Target:** `aql-lang/aql` — `aql:tui` runtime + `aql:io` watch.
-**Provenance:** surfaced while building this repo's `viewer/` (the `av`
+**Provenance:** surfaced while building this repo's `viewer/` (the `alice`
 TUI file viewer); recorded as **§6** and "worth keeping" notes in the
 2026-07-21 round of [`dx-report.md`](../dx-report.md).
 **Build referenced:** `aql @ c1d2a1a` (main, 2026-07-20).
@@ -30,15 +30,15 @@ sidestep body execution entirely and matches the tui event model).
 `tuikit.VirtualBackend` (inject events, snapshot the screen) exists for
 Go tests, and the wasm playground registers a browser backend — but an
 AQL program cannot reach either, so an aql:tui app's loop is untestable
-from AQL itself. The `av` viewer compensates by exporting its update
-fold (`Av.feed state ev → state'`) and driving it from a plain test
+from AQL itself. The `alice` viewer compensates by exporting its update
+fold (`Alice.feed state ev → state'`) and driving it from a plain test
 suite — that covers logic, command mode, tabs, search, and watch-reload
 headlessly, but rendering and key decoding stay untested outside a
 manual PTY session.
 
 **Ask:** a host-registered virtual backend selectable from AQL —
 `Tui.open {backend: virtual, cols: 80, rows: 24}` plus words to inject
-an event and read the screen/frame — so the `Av.feed` pattern can
+an event and read the screen/frame — so the `Alice.feed` pattern can
 extend to pixels. (Until then, the feed-word pattern is worth
 documenting for app authors.)
 

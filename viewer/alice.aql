@@ -1,21 +1,21 @@
-# av: the shell of the av viewer — the only module that touches the
+# alice: the shell of the alice viewer — the only module that touches the
 # terminal. Elm-style app map over aql:tui's Tui.run (the todo-tui.aql
 # idiom): pure `update` folds events into a state map, pure `view`
-# (av-view) renders it, and background work (file watchers) arrives as
+# (alice-view) renders it, and background work (file watchers) arrives as
 # ordinary mailbox messages sent to the registered "tui" process.
 #
-#   import "./viewer/av.aql"
-#   Av.run {}                                     # welcome tab, :open files
-#   Av.run {files: ["a.json", "b.csv"]}           # open files (watch ON)
-#   Av.run {files: ["big.json"], watch: false}    # without auto-reload
-#   Av.serve {tcp: 9700, token: "s3cret"} …       # remote viewing (aql attach)
+#   import "./viewer/alice.aql"
+#   Alice.run {}                                     # welcome tab, :open files
+#   Alice.run {files: ["a.json", "b.csv"]}           # open files (watch ON)
+#   Alice.run {files: ["big.json"], watch: false}    # without auto-reload
+#   Alice.serve {tcp: 9700, token: "s3cret"} …       # remote viewing (aql attach)
 #
 # aql has no script argv (see the repo dx-report), so passing files
 # from a shell means `aql -e`:
-#   aql -e 'import "./viewer/av.aql"  Av.run {files: ["test/fixtures/sample.json"]}'
+#   aql -e 'import "./viewer/alice.aql"  Alice.run {files: ["test/fixtures/sample.json"]}'
 #
 # App state:
-#   { tabs, active, next          the tab set (av-tabs)
+#   { tabs, active, next          the tab set (alice-tabs)
 #     mode                        "browse" | "command" | "search" | "help"
 #     cmd                         Tui.input widget for : and / lines
 #     matches, mi                 current search hits + cursor
@@ -27,7 +27,7 @@
 # {match: basename} filter (editors replace files via temp+rename; a
 # dir watch survives that, a file watch dies) → the module-level
 # `notify-change` body sends {tag: "file-changed"} to "tui" → update
-# reloads every watched tab via AvTabs.reanchor, which retains the
+# reloads every watched tab via AliceTabs.reanchor, which retains the
 # view position. IO.watch bodies run later, in a forked runtime: they
 # can only reference MODULE-LEVEL words, never fn locals.
 
@@ -37,11 +37,11 @@ import "aql:io"
 import "aql:time-util"
 import "aql:math-util"
 import "aql:string-util"
-import "./av-fmt.aql"
-import "./av-doc.aql"
-import "./av-nav.aql"
-import "./av-tabs.aql"
-import "./av-view.aql"
+import "./alice-fmt.aql"
+import "./alice-doc.aql"
+import "./alice-nav.aql"
+import "./alice-tabs.aql"
+import "./alice-view.aql"
 
 
 # --- small helpers ---------------------------------------------------
@@ -82,7 +82,7 @@ def has-ctrl fn [
 #
 # Watching is POLL-based: a spawned metronome process ticks the app
 # once a second and `update` compares each watched tab's mtime+size
-# stamp against a fresh IO.stat, reloading through AvTabs.reanchor on
+# stamp against a fresh IO.stat, reloading through AliceTabs.reanchor on
 # change. fsnotify (IO.watch) is NOT used: its callback fork never runs
 # while Tui.run's driver owns the runtime, so events are simply never
 # delivered to a live TUI (headless scripts receive them fine — see the
@@ -93,7 +93,7 @@ def has-ctrl fn [
 # One metronome per app run, spawned from on-init. It must reference
 # only module-level words: it runs in its own process. It dies with the
 # app: send to an unregistered "tui" raises, ending the loop body.
-def av-metronome fn [
+def alice-metronome fn [
   [] [Integer] [
     for 1000000000 [
       TimeUtil.sleep 1000
@@ -135,8 +135,8 @@ def stop-watch fn [
 # Reload one tab, marking it gone when the file vanished, and restamp.
 def reload-watched fn [
   [tab:Map vh:Integer] [Map] [
-    def res (AvFmt.load (tab get "path") ((tab get "opts") otherwise {}))
-    def t2 (AvTabs.reanchor (tab) (res) (vh))
+    def res (AliceFmt.load (tab get "path") ((tab get "opts") otherwise {}))
+    def t2 (AliceTabs.reanchor (tab) (res) (vh))
     def t3 (if (res get "ok") [ (t2) ] [
       def st (do [ IO.stat (make Pathon (tab get "path")) ])
       (t2) set gone (((st) is None) or ((st) is Error))
@@ -171,9 +171,9 @@ def watch-all fn [
 
 def close-or-quit fn [
   [state:Map] [Map] [
-    def tab (AvTabs.active state)
+    def tab (AliceTabs.active state)
     def _ (stop-watch (tab))
-    def s2 (AvTabs.close state)
+    def s2 (AliceTabs.close state)
     if ((size (s2 get "tabs")) eq 0) [ Tui.quit (s2) ] [ (s2) ]
   ]
 ]
@@ -183,12 +183,12 @@ def cmd-open fn [
     if ((size (parts)) lt 2) [ (state) set msg "usage: :open <path> [kind]" ] [
       def pth (as-str (parts get 1))
       def opts (if ((size (parts)) gt 2) [ {kind: (as-str (parts get 2))} ] [ {} ])
-      def s2 (AvTabs.open state (pth) (opts))
-      def tab (AvTabs.active (s2))
+      def s2 (AliceTabs.open state (pth) (opts))
+      def tab (AliceTabs.active (s2))
       def wd (s2 get "watch-default")
       def tabw (if (wd) [ start-watch (tab) ] [ (tab) ])
-      def s3 (AvTabs.put-active (s2) (tabw))
-      def err ((AvTabs.active (s3)) get "err")
+      def s3 (AliceTabs.put-active (s2) (tabw))
+      def err ((AliceTabs.active (s3)) get "err")
       if ((err) is None) [ (s3) ] [ (s3) set msg `open: ${(as-str (err))}` ]
     ]
   ]
@@ -199,7 +199,7 @@ def cmd-tab fn [
     if ((size (parts)) lt 2) [ (state) set msg "usage: :tab <n>" ] [
       def n (do [ as-int (parts get 1) ])
       if ((n) is Error) [ (state) set msg "tab: not a number" ] [
-        AvTabs.activate state ((n) sub 1)
+        AliceTabs.activate state ((n) sub 1)
       ]
     ]
   ]
@@ -208,12 +208,12 @@ def cmd-tab fn [
 def cmd-watch fn [
   [state:Map parts:List] [Map] [
     def want (if ((size (parts)) gt 1) [ as-str (parts get 1) ] [ "on" ])
-    def tab (AvTabs.active state)
+    def tab (AliceTabs.active state)
     if ((want) eq "off") [
-      AvTabs.put-active state (stop-watch (tab))
+      AliceTabs.put-active state (stop-watch (tab))
     ] [
       def t2 (start-watch (tab))
-      def s2 (AvTabs.put-active state (t2))
+      def s2 (AliceTabs.put-active state (t2))
       if (t2 get "watch") [ (s2) ] [ (s2) set msg "watch: nothing to watch here" ]
     ]
   ]
@@ -227,8 +227,8 @@ def run-command fn [
       "open"  [ drop cmd-open state (parts) ]
       "close" [ drop close-or-quit state ]
       "tab"   [ drop cmd-tab state (parts) ]
-      "next"  [ drop AvTabs.next state ]
-      "prev"  [ drop AvTabs.prev state ]
+      "next"  [ drop AliceTabs.next state ]
+      "prev"  [ drop AliceTabs.prev state ]
       "watch" [ drop cmd-watch state (parts) ]
       "help"  [ drop (state) set mode "help" ]
       "quit"  [ drop Tui.quit (state) ]
@@ -246,13 +246,13 @@ def run-command fn [
 def run-search fn [
   [state:Map needle:String] [Map] [
     if ((needle) eq "") [ (state) ] [
-      def tab (AvTabs.active state)
-      def hits (AvDoc.search (tab get "doc") (needle))
+      def tab (AliceTabs.active state)
+      def hits (AliceDoc.search (tab get "doc") (needle))
       if ((size (hits)) eq 0) [
         ((state) set matches []) set msg `no match: ${needle}`
       ] [
         def s2 (((state) set matches (hits)) set mi 0)
-        def s3 (AvTabs.put-active (s2) (AvTabs.reveal (tab) (hits get 0) (view-h state)))
+        def s3 (AliceTabs.put-active (s2) (AliceTabs.reveal (tab) (hits get 0) (view-h state)))
         (s3) set msg `[1/${(size (hits))}]`
       ]
     ]
@@ -266,8 +266,8 @@ def next-match fn [
     if ((n) eq 0) [ (state) set msg "no matches" ] [
       def mi2 ((((state get "mi") add (delta)) add (n)) mod (n))
       def s2 ((state) set mi (mi2))
-      def tab (AvTabs.active (s2))
-      def s3 (AvTabs.put-active (s2) (AvTabs.reveal (tab) (hits get (mi2)) (view-h state)))
+      def tab (AliceTabs.active (s2))
+      def s3 (AliceTabs.put-active (s2) (AliceTabs.reveal (tab) (hits get (mi2)) (view-h state)))
       (s3) set msg `[${(mi2) add 1}/${n}]`
     ]
   ]
@@ -275,19 +275,19 @@ def next-match fn [
 
 def search-current-key fn [
   [state:Map] [Map] [
-    def tab (AvTabs.active state)
+    def tab (AliceTabs.active state)
     def rw (row-at (tab get "rows") (tab get "focus"))
-    def ks (AvDoc.key-str (rw))
+    def ks (AliceDoc.key-str (rw))
     if ((ks) eq "") [ (state) set msg "no key under cursor" ] [ run-search state (ks) ]
   ]
 ]
 
 def yank-to-msg fn [
   [state:Map] [Map] [
-    def tab (AvTabs.active state)
+    def tab (AliceTabs.active state)
     def rw (row-at (tab get "rows") (tab get "focus"))
-    def pth (as-str (AvDoc.path-str (rw get "path")))
-    def vv (as-str (AvDoc.value-str (tab get "doc") (rw)))
+    def pth (as-str (AliceDoc.path-str (rw get "path")))
+    def vv (as-str (AliceDoc.value-str (tab get "doc") (rw)))
     (state) set msg `${pth} = ${vv}`
   ]
 ]
@@ -322,7 +322,7 @@ def browse-key fn [
   [state:Map ev:Map] [Map] [
     def vh (view-h state)
     if (has-ctrl ev) [
-      AvTabs.put-active state (AvNav.key (AvTabs.active state) ev (vh))
+      AliceTabs.put-active state (AliceNav.key (AliceTabs.active state) ev (vh))
     ] [
       def k ((ev get "key") otherwise "")
       case (k) [
@@ -330,15 +330,15 @@ def browse-key fn [
         ":"       [ drop enter-mode state "command" ":" ]
         "/"       [ drop enter-mode state "search" "/" ]
         "?"       [ drop (state) set mode "help" ]
-        "tab"     [ drop AvTabs.next state ]
-        "backtab" [ drop AvTabs.prev state ]
-        "W"       [ drop cmd-watch state (if ((AvTabs.active state) get "watch") [ ["watch", "off"] ] [ ["watch", "on"] ]) ]
-        "r"       [ drop AvTabs.put-active state (reload-watched (AvTabs.active state) (vh)) ]
+        "tab"     [ drop AliceTabs.next state ]
+        "backtab" [ drop AliceTabs.prev state ]
+        "W"       [ drop cmd-watch state (if ((AliceTabs.active state) get "watch") [ ["watch", "off"] ] [ ["watch", "on"] ]) ]
+        "r"       [ drop AliceTabs.put-active state (reload-watched (AliceTabs.active state) (vh)) ]
         "n"       [ drop next-match state 1 ]
         "N"       [ drop next-match state -1 ]
         "y"       [ drop yank-to-msg state ]
         "*"       [ drop search-current-key state ]
-        (AvTabs.put-active state (AvNav.key (AvTabs.active state) ev (vh)))
+        (AliceTabs.put-active state (AliceNav.key (AliceTabs.active state) ev (vh)))
       ]
     ]
   ]
@@ -361,13 +361,13 @@ def on-key fn [
 def on-init fn [
   [state:Map ev:Map] [Map] [
     def s2 ((state) set dim {cols: (ev get "cols"), rows: (ev get "rows")})
-    spawn [ av-metronome ]
+    spawn [ alice-metronome ]
     drop
     if (s2 get "watch-default") [ watch-all (s2) ] [ (s2) ]
   ]
 ]
 
-def av-update fn [
+def alice-update fn [
   [state:Map ev:Map] [Map] [
     def tag ((ev get "tag") otherwise "")
     case (tag) [
@@ -381,22 +381,22 @@ def av-update fn [
   ]
 ]
 
-def av-render fn [
+def alice-render fn [
   [state:Map] [Map] [
-    AvView.render state
+    AliceView.render state
   ]
 ]
 
 def open-welcome fn [
   [state:Map] [Map] [
     def doc {
-      av: "an aql file viewer (jless-style)"
+      alice: "an aql file viewer (jless-style)"
       open: "use  :open <path> [kind]  to load a file"
       formats: "json jsonic json5 jsonc csv tsv toml yaml xml ini zon markdown text"
       keys: "? shows the full keymap · q quits"
     }
     def tb {
-      id: 0, path: "(welcome)", kind: "-", doc: (doc), rows: (AvDoc.top (doc)),
+      id: 0, path: "(welcome)", kind: "-", doc: (doc), rows: (AliceDoc.top (doc)),
       focus: 0, scroll: 0, xoff: 0, pending: "", watch: false,
       err: none, gone: false, gen: 0, text: false, opts: {}
     }
@@ -405,7 +405,7 @@ def open-welcome fn [
   ]
 ]
 
-def av-app fn [
+def alice-app fn [
   [opts:Map] [Map] [
     def files (as-list (opts get "files"))
     def wd ((opts get "watch") otherwise true)
@@ -414,9 +414,9 @@ def av-app fn [
       cmd: (Tui.input "" {}), dim: {cols: 80, rows: 24},
       matches: [], mi: 0, watch-default: (wd)
     }
-    def s1 (fold [ var [[f acc] (AvTabs.open (acc) (as-str (f)) {}) ]] (files) (s0))
+    def s1 (fold [ var [[f acc] (AliceTabs.open (acc) (as-str (f)) {}) ]] (files) (s0))
     def s2 (if ((size (s1 get "tabs")) eq 0) [ open-welcome (s1) ] [ (s1) ])
-    def out { init: (s2), update: av-update/r, view: av-render/r }
+    def out { init: (s2), update: alice-update/r, view: alice-render/r }
     out
   ]
 ]
@@ -427,26 +427,26 @@ def av-app fn [
 # cannot resolve this module's private words; a module wrapper can).
 def feed fn [
   [state:Map ev:Map] [Map] [
-    av-update state ev
+    alice-update state ev
   ]
 ]
 
-def av-run fn [
+def alice-run fn [
   [opts:Map] [Map] [
-    Tui.run (av-app opts)
+    Tui.run (alice-app opts)
   ]
 ]
 
-def av-serve fn [
+def alice-serve fn [
   [opts:Map] [Map] [
-    Tui.serve {tcp: (opts get "tcp"), token: (opts get "token")} (av-app opts)
+    Tui.serve {tcp: (opts get "tcp"), token: (opts get "token")} (alice-app opts)
   ]
 ]
 
 
-export "Av" {
-  app: av-app/r
+export "Alice" {
+  app: alice-app/r
   feed: feed/r
-  run: av-run/r
-  serve: av-serve/r
+  run: alice-run/r
+  serve: alice-serve/r
 }

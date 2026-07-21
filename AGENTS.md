@@ -191,6 +191,6 @@ appears in source order. The **postfix** chain `(a) print (b) print` reverses
 - `docs/how-to.md` — task recipes (sizing, merge, persist, test).
 - `test/bloom_smoke_test.aql` — a complete, runnable worked example.
 - `dx-report.md` — known AQL-runtime gotchas observed with this build.
-- `viewer/README.md` — the separate `av` TUI file viewer that lives in
+- `viewer/README.md` — the separate `alice` TUI file viewer that lives in
   this repo (written in AQL against aql *main*, not this library's pin);
   its AQL-runtime findings are the 2026-07-21 round in `dx-report.md`.

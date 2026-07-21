@@ -1,4 +1,4 @@
-# av-nav: the jless-style keymap as a pure fold over a tab's view
+# alice-nav: the jless-style keymap as a pure fold over a tab's view
 # state. No terminal words — fully unit-testable.
 #
 # A TAB map carries (at least) the view-state fields this module reads
@@ -6,12 +6,12 @@
 #
 #   { doc, rows, focus, scroll, xoff, pending, … }
 #
-# Public surface (the AvNav namespace exported at the bottom):
+# Public surface (the AliceNav namespace exported at the bottom):
 #
-#   AvNav.key tab ev vh     → tab'   fold one key event into a tab
+#   AliceNav.key tab ev vh     → tab'   fold one key event into a tab
 #                                    (vh = tree-pane height in rows)
-#   AvNav.follow tab vh     → tab'   clamp focus + scroll into view
-#   AvNav.index-of tab path → Integer  row index of a path (-1 absent)
+#   AliceNav.follow tab vh     → tab'   clamp focus + scroll into view
+#   AliceNav.index-of tab path → Integer  row index of a path (-1 absent)
 #
 # Key map (jless subset + noted deviations):
 #   j / down    focus down          k / up      focus up
@@ -25,12 +25,12 @@
 #   C-e C-y     scroll only         z then z/t/b  center / top / bottom
 #   . / ,       horizontal value scroll right / left
 #
-# Quit, tabs, command / search modes are the shell's concern (av.aql);
+# Quit, tabs, command / search modes are the shell's concern (alice.aql);
 # events not handled here return the tab unchanged.
 
 
 import "aql:math-util"
-import "./av-doc.aql"
+import "./alice-doc.aql"
 
 
 # --- small helpers ---------------------------------------------------
@@ -78,10 +78,10 @@ def follow fn [
 def index-of fn [
   [tab:Map p:List] [Integer] [
     def rows (tab get "rows")
-    def key (AvDoc.path-key (p))
+    def key (AliceDoc.path-key (p))
     fold [ var [[j acc]
       if ((acc) gte 0) [ (acc) ] [
-        if ((AvDoc.path-key ((rows get (j)) get "path")) eq (key)) [ (j) ] [ -1 ]
+        if ((AliceDoc.path-key ((rows get (j)) get "path")) eq (key)) [ (j) ] [ -1 ]
       ]
     ]] (range 0 (size (rows)) 1) -1
   ]
@@ -115,7 +115,7 @@ def prev-sibling fn [
 def next-sibling fn [
   [rows:List fx:Integer] [Integer] [
     def d ((rows get fx) get "depth")
-    def e (AvDoc.subtree-end (rows) (fx))
+    def e (AliceDoc.subtree-end (rows) (fx))
     if ((e) lt (size (rows))) [
       if (((rows get (e)) get "depth") eq (d)) [ (e) ] [ -1 ]
     ] [ -1 ]
@@ -168,7 +168,7 @@ def prev-depth-change fn [
 def do-expand fn [
   [tab:Map vh:Integer] [Map] [
     def fx (tab get "focus")
-    with-rows tab (AvDoc.expand (tab get "doc") (tab get "rows") (fx)) vh
+    with-rows tab (AliceDoc.expand (tab get "doc") (tab get "rows") (fx)) vh
   ]
 ]
 
@@ -178,12 +178,12 @@ def do-collapse fn [
     def fx (tab get "focus")
     def rw (rows get (fx))
     if (rw get "open") [
-      with-rows tab (AvDoc.collapse (rows) (fx)) vh
+      with-rows tab (AliceDoc.collapse (rows) (fx)) vh
     ] [
       # closed or leaf: jless moves to (and collapses at) the parent
       def pi (parent-index (rows) (fx))
       if ((pi) eq (fx)) [ (tab) ] [
-        with-rows (with-focus tab (pi) vh) (AvDoc.collapse (rows) (pi)) vh
+        with-rows (with-focus tab (pi) vh) (AliceDoc.collapse (rows) (pi)) vh
       ]
     ]
   ]
@@ -193,7 +193,7 @@ def do-toggle fn [
   [tab:Map vh:Integer] [Map] [
     def rw ((tab get "rows") get (tab get "focus"))
     if (rw get "open") [
-      with-rows tab (AvDoc.collapse (tab get "rows") (tab get "focus")) vh
+      with-rows tab (AliceDoc.collapse (tab get "rows") (tab get "focus")) vh
     ] [ do-expand tab vh ]
   ]
 ]
@@ -205,7 +205,7 @@ def deep-expand fn [
   [tab:Map vh:Integer fuel:Integer] [Map] [
     def rows (tab get "rows")
     def fx (tab get "focus")
-    def e (AvDoc.subtree-end (rows) (fx))
+    def e (AliceDoc.subtree-end (rows) (fx))
     def cand (fold [ var [[j acc]
       if ((acc) gte 0) [ (acc) ] [
         def rw (rows get (j))
@@ -213,7 +213,7 @@ def deep-expand fn [
       ]
     ]] (range (fx) (e) 1) -1)
     if (((cand) lt 0) or ((fuel) lte 0) or ((size (rows)) gt 5000)) [ (tab) ] [
-      deep-expand (with-rows tab (AvDoc.expand (tab get "doc") (rows) (cand)) vh) vh ((fuel) sub 1)
+      deep-expand (with-rows tab (AliceDoc.expand (tab get "doc") (rows) (cand)) vh) vh ((fuel) sub 1)
     ]
   ]
 ]
@@ -252,7 +252,7 @@ def move-out fn [
     def fx (tab get "focus")
     def rw (rows get (fx))
     if (rw get "open") [
-      with-rows tab (AvDoc.collapse (rows) (fx)) vh
+      with-rows tab (AliceDoc.collapse (rows) (fx)) vh
     ] [
       move-to-maybe tab (if ((parent-index (rows) (fx)) eq (fx)) [ -1 ] [ parent-index (rows) (fx) ]) vh
     ]
@@ -344,7 +344,7 @@ def nav-key fn [
 ]
 
 
-export "AvNav" {
+export "AliceNav" {
   key: nav-key/r
   follow: follow/r
   index-of: index-of/r

@@ -1,11 +1,11 @@
-# av viewer: unit tests for viewer/av-doc.aql (document → row model).
+# alice viewer: unit tests for viewer/alice-doc.aql (document → row model).
 #
 # Run from the repo root:
-#   aql test/av_doc_unit_test.aql
+#   aql test/alice_doc_unit_test.aql
 
 
 import "aql:test" end
-import "./viewer/av-doc.aql" end
+import "./viewer/alice-doc.aql" end
 
 
 # Fixture documents, at top level (aql check treats test bodies as
@@ -19,7 +19,7 @@ def _lines ["first", "second", "", "fourth"]
 # --- top: root plus one expanded level ------------------------------
 
 [
-  def rows (AvDoc.top (_doc))
+  def rows (AliceDoc.top (_doc))
   4 (size (rows)) Assert.equal end
   true  ((rows get 0) get "open") Assert.equal end
   "map" ((rows get 0) get "kind") Assert.equal end
@@ -37,7 +37,7 @@ def _lines ["first", "second", "", "fourth"]
 # --- top of a scalar document is a single leaf row ------------------
 
 [
-  def rows (AvDoc.top 42)
+  def rows (AliceDoc.top 42)
   1 (size (rows)) Assert.equal end
   "leaf" ((rows get 0) get "kind") Assert.equal end
 ] "top-scalar" Test.test end
@@ -46,8 +46,8 @@ def _lines ["first", "second", "", "fourth"]
 # --- expand splices child rows in place -----------------------------
 
 [
-  def rows (AvDoc.top (_doc))
-  def rows2 (AvDoc.expand (_doc) (rows) 1)
+  def rows (AliceDoc.top (_doc))
+  def rows2 (AliceDoc.expand (_doc) (rows) 1)
   6 (size (rows2)) Assert.equal end
   true ((rows2 get 1) get "open") Assert.equal end
   "age" ((rows2 get 2) get "key") Assert.equal end
@@ -60,41 +60,41 @@ def _lines ["first", "second", "", "fourth"]
 # --- expand is a no-op on open rows and leaves ----------------------
 
 [
-  def rows (AvDoc.top (_doc))
-  def rows2 (AvDoc.expand (_doc) (rows) 1)
-  true ((AvDoc.expand (_doc) (rows2) 1) deq (rows2)) Assert.equal end
-  true ((AvDoc.expand (_doc) (rows2) 4) deq (rows2)) Assert.equal end
+  def rows (AliceDoc.top (_doc))
+  def rows2 (AliceDoc.expand (_doc) (rows) 1)
+  true ((AliceDoc.expand (_doc) (rows2) 1) deq (rows2)) Assert.equal end
+  true ((AliceDoc.expand (_doc) (rows2) 4) deq (rows2)) Assert.equal end
 ] "expand-noop" Test.test end
 
 
 # --- collapse inverts expand ----------------------------------------
 
 [
-  def rows (AvDoc.top (_doc))
-  def rows2 (AvDoc.expand (_doc) (rows) 1)
-  def rows3 (AvDoc.collapse (rows2) 1)
+  def rows (AliceDoc.top (_doc))
+  def rows2 (AliceDoc.expand (_doc) (rows) 1)
+  def rows3 (AliceDoc.collapse (rows2) 1)
   true ((rows3) deq (rows)) Assert.equal end
-  true ((AvDoc.collapse (rows3) 1) deq (rows)) Assert.equal end
+  true ((AliceDoc.collapse (rows3) 1) deq (rows)) Assert.equal end
 ] "collapse-inverts" Test.test end
 
 
 # --- subtree-end ----------------------------------------------------
 
 [
-  def rows (AvDoc.top (_doc))
-  def rows2 (AvDoc.expand (_doc) (rows) 1)
-  4 (AvDoc.subtree-end (rows2) 1) Assert.equal end
-  6 (AvDoc.subtree-end (rows2) 0) Assert.equal end
-  3 (AvDoc.subtree-end (rows2) 2) Assert.equal end
-  6 (AvDoc.subtree-end (rows2) 5) Assert.equal end
+  def rows (AliceDoc.top (_doc))
+  def rows2 (AliceDoc.expand (_doc) (rows) 1)
+  4 (AliceDoc.subtree-end (rows2) 1) Assert.equal end
+  6 (AliceDoc.subtree-end (rows2) 0) Assert.equal end
+  3 (AliceDoc.subtree-end (rows2) 2) Assert.equal end
+  6 (AliceDoc.subtree-end (rows2) 5) Assert.equal end
 ] "subtree-end" Test.test end
 
 
 # --- kids of a list row ---------------------------------------------
 
 [
-  def rows (AvDoc.top (_doc))
-  def ks (AvDoc.kids (_doc) (rows get 3))
+  def rows (AliceDoc.top (_doc))
+  def ks (AliceDoc.kids (_doc) (rows get 3))
   2 (size (ks)) Assert.equal end
   0 ((ks get 0) get "key") Assert.equal end
   1 ((ks get 1) get "key") Assert.equal end
@@ -106,86 +106,86 @@ def _lines ["first", "second", "", "fourth"]
 # --- value-at -------------------------------------------------------
 
 [
-  36 (AvDoc.value-at (_doc) ["meta", "age"]) Assert.equal end
-  "y" (AvDoc.value-at (_doc) ["tags", 1]) Assert.equal end
-  2 (AvDoc.value-at (_deep) ["a", "b", "c", 1, "d"]) Assert.equal end
-  true ((AvDoc.value-at (_doc) ["meta", "nope"]) is None) Assert.equal end
-  true ((AvDoc.value-at (_doc) ["tags", 9]) is None) Assert.equal end
-  true ((AvDoc.value-at (_doc) ["tags", -1]) is None) Assert.equal end
-  true ((AvDoc.value-at (_doc) ["name", "deeper"]) is None) Assert.equal end
+  36 (AliceDoc.value-at (_doc) ["meta", "age"]) Assert.equal end
+  "y" (AliceDoc.value-at (_doc) ["tags", 1]) Assert.equal end
+  2 (AliceDoc.value-at (_deep) ["a", "b", "c", 1, "d"]) Assert.equal end
+  true ((AliceDoc.value-at (_doc) ["meta", "nope"]) is None) Assert.equal end
+  true ((AliceDoc.value-at (_doc) ["tags", 9]) is None) Assert.equal end
+  true ((AliceDoc.value-at (_doc) ["tags", -1]) is None) Assert.equal end
+  true ((AliceDoc.value-at (_doc) ["name", "deeper"]) is None) Assert.equal end
 ] "value-at" Test.test end
 
 
 # --- has-path -------------------------------------------------------
 
 [
-  true (AvDoc.has-path (_doc) []) Assert.equal end
-  true (AvDoc.has-path (_doc) ["meta", "age"]) Assert.equal end
-  true (AvDoc.has-path (_deep) ["a", "b", "c", 1, "d"]) Assert.equal end
-  false (AvDoc.has-path (_doc) ["meta", "nope"]) Assert.equal end
-  false (AvDoc.has-path (_doc) ["tags", 2]) Assert.equal end
-  false (AvDoc.has-path (_doc) ["nope", "deep", "er"]) Assert.equal end
+  true (AliceDoc.has-path (_doc) []) Assert.equal end
+  true (AliceDoc.has-path (_doc) ["meta", "age"]) Assert.equal end
+  true (AliceDoc.has-path (_deep) ["a", "b", "c", 1, "d"]) Assert.equal end
+  false (AliceDoc.has-path (_doc) ["meta", "nope"]) Assert.equal end
+  false (AliceDoc.has-path (_doc) ["tags", 2]) Assert.equal end
+  false (AliceDoc.has-path (_doc) ["nope", "deep", "er"]) Assert.equal end
 ] "has-path" Test.test end
 
 
 # --- parent ---------------------------------------------------------
 
 [
-  true ((AvDoc.parent ["a", "b"]) deq ["a"]) Assert.equal end
-  0 (size (AvDoc.parent ["a"])) Assert.equal end
-  0 (size (AvDoc.parent [])) Assert.equal end
+  true ((AliceDoc.parent ["a", "b"]) deq ["a"]) Assert.equal end
+  0 (size (AliceDoc.parent ["a"])) Assert.equal end
+  0 (size (AliceDoc.parent [])) Assert.equal end
 ] "parent" Test.test end
 
 
 # --- display strings ------------------------------------------------
 
 [
-  ".meta.age" (AvDoc.path-str ["meta", "age"]) Assert.equal end
-  ".tags[1]" (AvDoc.path-str ["tags", 1]) Assert.equal end
-  "" (AvDoc.path-str []) Assert.equal end
+  ".meta.age" (AliceDoc.path-str ["meta", "age"]) Assert.equal end
+  ".tags[1]" (AliceDoc.path-str ["tags", 1]) Assert.equal end
+  "" (AliceDoc.path-str []) Assert.equal end
 ] "path-str" Test.test end
 
 [
-  def rows (AvDoc.top (_doc))
-  def rows2 (AvDoc.expand (_doc) (rows) 1)
-  "" (AvDoc.key-str (rows2 get 0)) Assert.equal end
-  "meta" (AvDoc.key-str (rows2 get 1)) Assert.equal end
-  def ks (AvDoc.kids (_doc) (rows2 get 5))
-  "[0]" (AvDoc.key-str (ks get 0)) Assert.equal end
+  def rows (AliceDoc.top (_doc))
+  def rows2 (AliceDoc.expand (_doc) (rows) 1)
+  "" (AliceDoc.key-str (rows2 get 0)) Assert.equal end
+  "meta" (AliceDoc.key-str (rows2 get 1)) Assert.equal end
+  def ks (AliceDoc.kids (_doc) (rows2 get 5))
+  "[0]" (AliceDoc.key-str (ks get 0)) Assert.equal end
 ] "key-str" Test.test end
 
 [
-  def rows (AvDoc.top (_doc))
-  def rows2 (AvDoc.expand (_doc) (rows) 1)
-  "{…} 2 keys" (AvDoc.value-str (_doc) (rows2 get 1)) Assert.equal end
-  "[…] 2 items" (AvDoc.value-str (_doc) (rows2 get 5)) Assert.equal end
-  "36" (AvDoc.value-str (_doc) (rows2 get 2)) Assert.equal end
-  "true" (AvDoc.value-str (_doc) (rows2 get 3)) Assert.equal end
-  "'ada'" (AvDoc.value-str (_doc) (rows2 get 4)) Assert.equal end
+  def rows (AliceDoc.top (_doc))
+  def rows2 (AliceDoc.expand (_doc) (rows) 1)
+  "{…} 2 keys" (AliceDoc.value-str (_doc) (rows2 get 1)) Assert.equal end
+  "[…] 2 items" (AliceDoc.value-str (_doc) (rows2 get 5)) Assert.equal end
+  "36" (AliceDoc.value-str (_doc) (rows2 get 2)) Assert.equal end
+  "true" (AliceDoc.value-str (_doc) (rows2 get 3)) Assert.equal end
+  "'ada'" (AliceDoc.value-str (_doc) (rows2 get 4)) Assert.equal end
 ] "value-str" Test.test end
 
 
 # --- search ---------------------------------------------------------
 
 [
-  def hits (AvDoc.search (_doc) "ada")
+  def hits (AliceDoc.search (_doc) "ada")
   1 (size (hits)) Assert.equal end
   true ((hits get 0) deq ["name"]) Assert.equal end
 ] "search-value-hit" Test.test end
 
 [
-  def hits (AvDoc.search (_doc) "age")
+  def hits (AliceDoc.search (_doc) "age")
   1 (size (hits)) Assert.equal end
   true ((hits get 0) deq ["meta", "age"]) Assert.equal end
 ] "search-key-hit" Test.test end
 
 [
-  0 (size (AvDoc.search (_doc) "AGE")) Assert.equal end
-  0 (size (AvDoc.search (_doc) "ADA")) Assert.equal end
+  0 (size (AliceDoc.search (_doc) "AGE")) Assert.equal end
+  0 (size (AliceDoc.search (_doc) "ADA")) Assert.equal end
 ] "search-smart-case" Test.test end
 
 [
-  def hits (AvDoc.search (_deep) "d")
+  def hits (AliceDoc.search (_deep) "d")
   1 (size (hits)) Assert.equal end
   true ((hits get 0) deq ["a", "b", "c", 1, "d"]) Assert.equal end
 ] "search-deep-key" Test.test end
@@ -194,19 +194,19 @@ def _lines ["first", "second", "", "fourth"]
 # --- expansion sets + rebuild ---------------------------------------
 
 [
-  def rows (AvDoc.top (_doc))
-  def rows2 (AvDoc.expand (_doc) (rows) 1)
-  def rows3 (AvDoc.expand (_doc) (rows2) 5)
-  def exps (AvDoc.expanded-of (rows3))
-  def rebuilt (AvDoc.rebuild (_doc) (exps))
+  def rows (AliceDoc.top (_doc))
+  def rows2 (AliceDoc.expand (_doc) (rows) 1)
+  def rows3 (AliceDoc.expand (_doc) (rows2) 5)
+  def exps (AliceDoc.expanded-of (rows3))
+  def rebuilt (AliceDoc.rebuild (_doc) (exps))
   true ((rebuilt) deq (rows3)) Assert.equal end
 ] "rebuild-round-trip" Test.test end
 
 [
-  def rows (AvDoc.top (_doc))
-  def exps (AvDoc.expanded-of (rows))
-  def stale ((exps) set (AvDoc.path-key ["ghost", "node"]) true)
-  def rebuilt (AvDoc.rebuild (_doc) (stale))
+  def rows (AliceDoc.top (_doc))
+  def exps (AliceDoc.expanded-of (rows))
+  def stale ((exps) set (AliceDoc.path-key ["ghost", "node"]) true)
+  def rebuilt (AliceDoc.rebuild (_doc) (stale))
   true ((rebuilt) deq (rows)) Assert.equal end
 ] "rebuild-ignores-stale-paths" Test.test end
 
@@ -214,11 +214,11 @@ def _lines ["first", "second", "", "fourth"]
 # --- text documents (a list of lines) -------------------------------
 
 [
-  def rows (AvDoc.top (_lines))
+  def rows (AliceDoc.top (_lines))
   5 (size (rows)) Assert.equal end
   "list" ((rows get 0) get "kind") Assert.equal end
-  "'first'" (AvDoc.value-str (_lines) (rows get 1)) Assert.equal end
-  "''" (AvDoc.value-str (_lines) (rows get 3)) Assert.equal end
+  "'first'" (AliceDoc.value-str (_lines) (rows get 1)) Assert.equal end
+  "''" (AliceDoc.value-str (_lines) (rows get 3)) Assert.equal end
 ] "text-doc-rows" Test.test end
 
 

@@ -31,7 +31,7 @@ mistakes to avoid. Every example there is verified against the pinned
   `dx-report.md`. The pinned aql commit is single-sourced in the CI workflow's
   `AQL_REF` (`.github/workflows/test.yml`); a CI `consistency` job fails if the
   hook, `test/divergence/run.sh`, or `api.json` drift from it.
-- `viewer/` + `av.aql` is a separate deliverable: the `av` TUI file viewer
+- `viewer/` + `alice.aql` is a separate deliverable: the `alice` TUI file viewer
   (jless-style; tabs; watch-reload), written in AQL against aql **main** —
   NOT the library pin, which predates the `aql:tui` stack it needs. Build
   aql from latest main to run/develop it; its conventions and keymap are in

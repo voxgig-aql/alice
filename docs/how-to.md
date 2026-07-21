@@ -280,16 +280,16 @@ choice — building a bulk fixture at top level — that keeps the suites clear
 of it.
 
 
-## Run the av file viewer
+## Run the alice file viewer
 
-The repo also ships `av` — a jless-style TUI viewer for every format aql
+The repo also ships `alice` — a jless-style TUI viewer for every format aql
 parses, with tabs and watch-reload, written in AQL. It needs an aql built
 from **latest main** (the `aql:tui` stack postdates this library's pinned
 build): follow [Install and run aql](#install-and-run-aql) but check out
 `main` instead of the pin, then, from the repo root:
 
 ```bash
-aql av.aql        # welcome tab; open files with  :open <path> [kind]
+aql alice.aql     # welcome tab; open files with  :open <path> [kind]
 ```
 
 Keymap, watch semantics, and headless testing notes:

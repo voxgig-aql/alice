@@ -1,4 +1,4 @@
-  # The av viewer (viewer/) deliberately tracks aql MAIN, unpinned: the
+  # The alice viewer (viewer/) deliberately tracks aql MAIN, unpinned: the
   # aql:tui stack it is built on (landed 2026-07-17) postdates the
   # library's pinned build, which cannot run it. This job builds the
   # latest main per run — an upstream regression can therefore break it
@@ -32,29 +32,29 @@
 
       - name: Static check (viewer modules + launcher + suites)
         run: |
-          aql check av.aql
+          aql check alice.aql
           cd viewer
-          for f in av-fmt.aql av-doc.aql av-nav.aql av-tabs.aql av-view.aql av.aql; do
+          for f in alice-fmt.aql alice-doc.aql alice-nav.aql alice-tabs.aql alice-view.aql alice.aql; do
             aql check "$f"
           done
 
-      - name: Unit suite — av-fmt
-        run: aql test/av_fmt_unit_test.aql
+      - name: Unit suite — alice-fmt
+        run: aql test/alice_fmt_unit_test.aql
 
-      - name: Unit suite — av-doc
-        run: aql test/av_doc_unit_test.aql
+      - name: Unit suite — alice-doc
+        run: aql test/alice_doc_unit_test.aql
 
-      - name: Property suite — av-doc
-        run: aql test/av_doc_prop_test.aql
+      - name: Property suite — alice-doc
+        run: aql test/alice_doc_prop_test.aql
 
-      - name: Unit suite — av-nav
-        run: aql test/av_nav_unit_test.aql
+      - name: Unit suite — alice-nav
+        run: aql test/alice_nav_unit_test.aql
 
-      - name: Unit suite — av-tabs
-        run: aql test/av_tabs_unit_test.aql
+      - name: Unit suite — alice-tabs
+        run: aql test/alice_tabs_unit_test.aql
 
       - name: Headless app integration suite
-        run: aql test/av_app_unit_test.aql
+        run: aql test/alice_app_unit_test.aql
 
       - name: Fixtures smoke
-        run: aql test/av_smoke_test.aql
+        run: aql test/alice_smoke_test.aql

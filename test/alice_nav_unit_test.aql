@@ -1,12 +1,12 @@
-# av viewer: unit tests for viewer/av-nav.aql (the jless keymap fold).
+# alice viewer: unit tests for viewer/alice-nav.aql (the jless keymap fold).
 #
 # Run from the repo root:
-#   aql test/av_nav_unit_test.aql
+#   aql test/alice_nav_unit_test.aql
 
 
 import "aql:test" end
-import "./viewer/av-doc.aql" end
-import "./viewer/av-nav.aql" end
+import "./viewer/alice-doc.aql" end
+import "./viewer/alice-nav.aql" end
 
 
 def _doc {a: {b: {c: [1, 2]}, d: true}, e: "s", f: [10, 20, 30]}
@@ -15,7 +15,7 @@ def _doc {a: {b: {c: [1, 2]}, d: true}, e: "s", f: [10, 20, 30]}
 # (root, a, e, f), focus at the root, 5-row window.
 def _mk fn [
   [] [Map] [
-    def rows (AvDoc.top (_doc))
+    def rows (AliceDoc.top (_doc))
     def out {doc: (_doc), rows: (rows), focus: 0, scroll: 0, xoff: 0, pending: ""}
     out
   ]
@@ -27,21 +27,21 @@ def _vh 5
 # --- vertical movement ----------------------------------------------
 
 [
-  def t1 (AvNav.key (_mk) {key: "j"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "j"} (_vh))
   1 (t1 get "focus") Assert.equal end
   0 (t1 get "scroll") Assert.equal end
-  def t2 (AvNav.key (t1) {key: "down"} (_vh))
-  def t3 (AvNav.key (t2) {key: "k"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "down"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "k"} (_vh))
   1 (t3 get "focus") Assert.equal end
-  def t4 (AvNav.key (t3) {key: "up"} (_vh))
-  def t5 (AvNav.key (t4) {key: "up"} (_vh))
+  def t4 (AliceNav.key (t3) {key: "up"} (_vh))
+  def t5 (AliceNav.key (t4) {key: "up"} (_vh))
   0 (t5 get "focus") Assert.equal end
 ] "focus-up-down-clamps" Test.test end
 
 [
-  def t1 (AvNav.key (_mk) {key: "G"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "G"} (_vh))
   3 (t1 get "focus") Assert.equal end
-  def t2 (AvNav.key (t1) {key: "g"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "g"} (_vh))
   0 (t2 get "focus") Assert.equal end
   0 (t2 get "scroll") Assert.equal end
 ] "first-last-row" Test.test end
@@ -50,33 +50,33 @@ def _vh 5
 # --- expand / step in / collapse / step out -------------------------
 
 [
-  def t1 (AvNav.key (_mk) {key: "j"} (_vh))
-  def t2 (AvNav.key (t1) {key: "l"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "j"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "l"} (_vh))
   6 (size (t2 get "rows")) Assert.equal end
   1 (t2 get "focus") Assert.equal end
   true (((t2 get "rows") get 1) get "open") Assert.equal end
-  def t3 (AvNav.key (t2) {key: "l"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "l"} (_vh))
   2 (t3 get "focus") Assert.equal end
   "b" (((t3 get "rows") get 2) get "key") Assert.equal end
 ] "expand-then-step-in" Test.test end
 
 [
-  def t1 (AvNav.key (_mk) {key: "j"} (_vh))
-  def t2 (AvNav.key (t1) {key: "l"} (_vh))
-  def t3 (AvNav.key (t2) {key: "l"} (_vh))
-  def t4 (AvNav.key (t3) {key: "h"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "j"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "l"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "l"} (_vh))
+  def t4 (AliceNav.key (t3) {key: "h"} (_vh))
   1 (t4 get "focus") Assert.equal end
   6 (size (t4 get "rows")) Assert.equal end
-  def t5 (AvNav.key (t4) {key: "h"} (_vh))
+  def t5 (AliceNav.key (t4) {key: "h"} (_vh))
   4 (size (t5 get "rows")) Assert.equal end
   false (((t5 get "rows") get 1) get "open") Assert.equal end
 ] "step-out-then-collapse" Test.test end
 
 [
-  def t1 (AvNav.key (_mk) {key: "j"} (_vh))
-  def t2 (AvNav.key (t1) {key: "space"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "j"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "space"} (_vh))
   6 (size (t2 get "rows")) Assert.equal end
-  def t3 (AvNav.key (t2) {key: "space"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "space"} (_vh))
   4 (size (t3 get "rows")) Assert.equal end
   true ((t3 get "rows") deq (t1 get "rows")) Assert.equal end
 ] "space-toggles" Test.test end
@@ -85,39 +85,39 @@ def _vh 5
 # --- siblings and depth moves ---------------------------------------
 
 [
-  def t1 (AvNav.key (_mk) {key: "j"} (_vh))
-  def t2 (AvNav.key (t1) {key: "J"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "j"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "J"} (_vh))
   2 (t2 get "focus") Assert.equal end
-  def t3 (AvNav.key (t2) {key: "K"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "K"} (_vh))
   1 (t3 get "focus") Assert.equal end
-  def t4 (AvNav.key (t3) {key: "K"} (_vh))
+  def t4 (AliceNav.key (t3) {key: "K"} (_vh))
   1 (t4 get "focus") Assert.equal end
 ] "sibling-moves" Test.test end
 
 [
-  def t1 (AvNav.key (_mk) {key: "j"} (_vh))
-  def t2 (AvNav.key (t1) {key: "l"} (_vh))
-  def t3 (AvNav.key (t2) {key: "l"} (_vh))
-  def t4 (AvNav.key (t3) {key: "H"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "j"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "l"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "l"} (_vh))
+  def t4 (AliceNav.key (t3) {key: "H"} (_vh))
   1 (t4 get "focus") Assert.equal end
   6 (size (t4 get "rows")) Assert.equal end
 ] "H-parent-no-collapse" Test.test end
 
 [
-  def t1 (AvNav.key (_mk) {key: "j"} (_vh))
-  def t2 (AvNav.key (t1) {key: "l"} (_vh))
-  def t3 (AvNav.key (t2) {key: "w"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "j"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "l"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "w"} (_vh))
   2 (t3 get "focus") Assert.equal end
-  def t4 (AvNav.key (t3) {key: "b"} (_vh))
+  def t4 (AliceNav.key (t3) {key: "b"} (_vh))
   1 (t4 get "focus") Assert.equal end
 ] "depth-change-moves" Test.test end
 
 [
-  def t1 (AvNav.key (_mk) {key: "j"} (_vh))
-  def t2 (AvNav.key (t1) {key: "J"} (_vh))
-  def t3 (AvNav.key (t2) {key: "0"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "j"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "J"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "0"} (_vh))
   1 (t3 get "focus") Assert.equal end
-  def t4 (AvNav.key (t3) {key: "$"} (_vh))
+  def t4 (AliceNav.key (t3) {key: "$"} (_vh))
   3 (t4 get "focus") Assert.equal end
 ] "first-last-sibling" Test.test end
 
@@ -125,7 +125,7 @@ def _vh 5
 # --- deep expand ----------------------------------------------------
 
 [
-  def t1 (AvNav.key (_mk) {key: "E"} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "E"} (_vh))
   12 (size (t1 get "rows")) Assert.equal end
 ] "deep-expand-all" Test.test end
 
@@ -133,37 +133,37 @@ def _vh 5
 # --- paging and scrolling -------------------------------------------
 
 [
-  def t0 (AvNav.key (_mk) {key: "E"} (_vh))
-  def t1 (AvNav.key (t0) {key: "f", mods: ["ctrl"]} (_vh))
+  def t0 (AliceNav.key (_mk) {key: "E"} (_vh))
+  def t1 (AliceNav.key (t0) {key: "f", mods: ["ctrl"]} (_vh))
   5 (t1 get "focus") Assert.equal end
   1 (t1 get "scroll") Assert.equal end
-  def t2 (AvNav.key (t1) {key: "d", mods: ["ctrl"]} (_vh))
+  def t2 (AliceNav.key (t1) {key: "d", mods: ["ctrl"]} (_vh))
   7 (t2 get "focus") Assert.equal end
-  def t3 (AvNav.key (t2) {key: "b", mods: ["ctrl"]} (_vh))
+  def t3 (AliceNav.key (t2) {key: "b", mods: ["ctrl"]} (_vh))
   2 (t3 get "focus") Assert.equal end
 ] "paging" Test.test end
 
 [
-  def t0 (AvNav.key (_mk) {key: "E"} (_vh))
-  def t1 (AvNav.key (t0) {key: "e", mods: ["ctrl"]} (_vh))
+  def t0 (AliceNav.key (_mk) {key: "E"} (_vh))
+  def t1 (AliceNav.key (t0) {key: "e", mods: ["ctrl"]} (_vh))
   1 (t1 get "scroll") Assert.equal end
   1 (t1 get "focus") Assert.equal end
-  def t2 (AvNav.key (t1) {key: "y", mods: ["ctrl"]} (_vh))
+  def t2 (AliceNav.key (t1) {key: "y", mods: ["ctrl"]} (_vh))
   0 (t2 get "scroll") Assert.equal end
 ] "scroll-only" Test.test end
 
 [
-  def t0 (AvNav.key (_mk) {key: "E"} (_vh))
-  def t1 (AvNav.key (t0) {key: "f", mods: ["ctrl"]} (_vh))
+  def t0 (AliceNav.key (_mk) {key: "E"} (_vh))
+  def t1 (AliceNav.key (t0) {key: "f", mods: ["ctrl"]} (_vh))
   5 (t1 get "focus") Assert.equal end
-  def t2 (AvNav.key (t1) {key: "z"} (_vh))
+  def t2 (AliceNav.key (t1) {key: "z"} (_vh))
   "z" (t2 get "pending") Assert.equal end
-  def t3 (AvNav.key (t2) {key: "t"} (_vh))
+  def t3 (AliceNav.key (t2) {key: "t"} (_vh))
   "" (t3 get "pending") Assert.equal end
   5 (t3 get "scroll") Assert.equal end
-  def t4 (AvNav.key ((t3) set pending "z") {key: "z"} (_vh))
+  def t4 (AliceNav.key ((t3) set pending "z") {key: "z"} (_vh))
   3 (t4 get "scroll") Assert.equal end
-  def t5 (AvNav.key ((t4) set pending "z") {key: "b"} (_vh))
+  def t5 (AliceNav.key ((t4) set pending "z") {key: "b"} (_vh))
   1 (t5 get "scroll") Assert.equal end
 ] "z-reposition" Test.test end
 
@@ -171,11 +171,11 @@ def _vh 5
 # --- horizontal offset ----------------------------------------------
 
 [
-  def t1 (AvNav.key (_mk) {key: "."} (_vh))
+  def t1 (AliceNav.key (_mk) {key: "."} (_vh))
   8 (t1 get "xoff") Assert.equal end
-  def t2 (AvNav.key (t1) {key: ","} (_vh))
+  def t2 (AliceNav.key (t1) {key: ","} (_vh))
   0 (t2 get "xoff") Assert.equal end
-  def t3 (AvNav.key (t2) {key: ","} (_vh))
+  def t3 (AliceNav.key (t2) {key: ","} (_vh))
   0 (t3 get "xoff") Assert.equal end
 ] "xoff" Test.test end
 
@@ -184,9 +184,9 @@ def _vh 5
 
 [
   def t0 (_mk)
-  def t1 (AvNav.key (t0) {key: "q"} (_vh))
+  def t1 (AliceNav.key (t0) {key: "q"} (_vh))
   true ((t1) deq (t0)) Assert.equal end
-  def t2 (AvNav.key (t0) {resize: true} (_vh))
+  def t2 (AliceNav.key (t0) {resize: true} (_vh))
   true ((t2) deq (t0)) Assert.equal end
 ] "unknown-keys-inert" Test.test end
 
@@ -195,9 +195,9 @@ def _vh 5
 
 [
   def t0 (_mk)
-  1 (AvNav.index-of (t0) ["a"]) Assert.equal end
-  0 (AvNav.index-of (t0) []) Assert.equal end
-  -1 (AvNav.index-of (t0) ["a", "b"]) Assert.equal end
+  1 (AliceNav.index-of (t0) ["a"]) Assert.equal end
+  0 (AliceNav.index-of (t0) []) Assert.equal end
+  -1 (AliceNav.index-of (t0) ["a", "b"]) Assert.equal end
 ] "index-of" Test.test end
 
 

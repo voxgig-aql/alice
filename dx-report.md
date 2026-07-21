@@ -260,14 +260,14 @@ this module's history):
 
 ---
 
-# 2026-07-21 round: the `av` viewer on aql main @ `c1d2a1a`
+# 2026-07-21 round: the `alice` viewer on aql main @ `c1d2a1a`
 
 **AQL build under test:** `aql-lang/aql` @ `c1d2a1a` (main, 2026-07-20),
 built from source in-workspace (`cd cmd/go && go build ./aql`; note
 `GOFLAGS=-mod=mod` now *fails* inside the aql workspace — "-mod may only
 be set to readonly or vendor when in workspace mode" — the flag is only
 for standalone clones).
-**Context:** building `viewer/` — a jless-style TUI file viewer with
+**Context:** building `viewer/` (the `alice` app) — a jless-style TUI file viewer with
 tabs and watch-reload, written in AQL on the freshly-landed `aql:tui`
 stack (upstream 2026-07-17). First real-world exercise of `aql:tui`,
 `aql:io` watching, the actor words, and deep cross-module call chains
@@ -287,22 +287,22 @@ or to a **recursive fn** completes without binding — no error at the
 def, then the *next* statement raises `undefined_word` for the name:
 
 ```aql
-def with-active fn [[state:Map tab:Map] [Map] [ AvTabs.put-active state (tab) ]]
+def with-active fn [[state:Map tab:Map] [Map] [ AliceTabs.put-active state (tab) ]]
 # inside a case arm several frames deep:
 def s3 (with-active (s2) (tabw))     # completes, binds NOTHING
-def err ((AvTabs.active (s3)) …)     # [aql/undefined_word]: s3
+def err ((AliceTabs.active (s3)) …)     # [aql/undefined_word]: s3
 ```
 
 Replacing the alias with the direct module call (`def s3
-(AvTabs.put-active (s2) (tabw))`) binds correctly; converting recursive
+(AliceTabs.put-active (s2) (tabw))`) binds correctly; converting recursive
 helpers (`add-ancestors`, `surviving-anchor`) to `fold`s fixed the same
-failure in `AvTabs.reanchor`/`reveal`. The same shapes work when called
+failure in `AliceTabs.reanchor`/`reveal`. The same shapes work when called
 from a test body or the top level — only the deep chain misbinds, so a
 green unit suite does not protect the composed program. Every viewer
 module now avoids local alias fns and recursion in state-machinery as a
 matter of policy. Not reduced to a standalone repro (context-sensitive);
 the pre-fix shapes are in this repo's git history
-(`viewer/av.aql`/`av-tabs.aql` before 7c6f739).
+(`viewer/alice.aql`/`alice-tabs.aql` before 7c6f739).
 
 ### 6. 🔴 `IO.watch` callbacks are never delivered while `Tui.run` runs
 
@@ -346,7 +346,7 @@ print (each [ var [[k] (hop ((doc) get (k))) ] ] (keys (doc)))  # ["leaf"] ✗
 ```
 
 **Workaround (shipped):** type dispatch in shared data-plumbing uses
-single-sig fns with native `is`-chains (`viewer/av-doc.aql`
+single-sig fns with native `is`-chains (`viewer/alice-doc.aql`
 `node-kind`/`get-seg`/`has-seg`); multi-sig overloads only where the
 dispatch happens directly on an expression at the call site.
 
@@ -363,8 +363,8 @@ survive; params do not). **Workaround:** bind first — `def out {x:
 `aql script.aql a b c` silently ignores `a b c` (the CLI reads only the
 script path), and no word exposes environment variables. A CLI tool
 written in AQL cannot receive "which file to open" from its command
-line — the viewer's launch story is `aql av.aql` + `:open`, or an
-`aql -e 'import … Av.run {files:[…]}'` one-liner. RFC:
+line — the viewer's launch story is `aql alice.aql` + `:open`, or an
+`aql -e 'import … Alice.run {files:[…]}'` one-liner. RFC:
 `proposals/script-argv-and-env.md`.
 
 ### 10. 🟡 Checker friction: several false-error shapes gate execution
@@ -384,8 +384,8 @@ parentheses; all shipped in `viewer/`):
 - `convert String x` needs a statically-Scalar `x`; an Any-typed name
   inside `${…}` is treated as a zero-arg call (→ tiny typed coercion
   helpers `as-str`/`as-int`, typed accessors like `row-at`).
-- `aql check viewer/av-nav.aql` from the repo root can't resolve the
-  module's sibling `./av-doc.aql` import — a top-level *script*'s
+- `aql check viewer/alice-nav.aql` from the repo root can't resolve the
+  module's sibling `./alice-doc.aql` import — a top-level *script*'s
   imports are CWD-relative; only *imported* modules resolve against
   their own directory (→ check intra-package modules from `viewer/`, or
   check the root launcher, which exercises the whole tree).
@@ -422,7 +422,7 @@ surfaces only hard read/parse errors.
   the whole tabnas family (plus `{fmt}` override, `{field:
   {separation:"\t"}}` for CSV variants — the "no tsv parse kind" gap in
   earlier planning was wrong at the IO.read level; only the `parse`
-  word's kind set lacks it). `viewer/av-fmt.aql` is ~40 lines because
+  word's kind set lacks it). `viewer/alice-fmt.aql` is ~40 lines because
   of this.
 - **The `aql:tui` core held up**: alt-screen, diffed rendering, widget
   layout, key decoding, `Tui.quit`, and the "any mailbox message folds
@@ -431,7 +431,7 @@ surfaces only hard read/parse errors.
 - **`canon` is the right display serializer** (no HTML escaping, smart
   quote switching, `none`/numbers/bools render cleanly).
 - **Headless TUI testing via an exported feed word**: exporting the
-  update fold (`Av.feed`) lets a plain test suite drive the real app —
+  update fold (`Alice.feed`) lets a plain test suite drive the real app —
   command mode, tabs, search, watch-reload against real disk writes —
   with no terminal. Pattern recommended for any aql:tui app (an
   AQL-reachable virtual backend would still be better — see proposal).

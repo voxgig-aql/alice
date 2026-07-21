@@ -1,4 +1,4 @@
-# av — an aql file viewer
+# alice — an aql file viewer
 
 A full-screen terminal viewer for every file format aql can parse,
 written **in AQL** on the `aql:tui` stack, modeled on
@@ -17,7 +17,7 @@ verified" commit is recorded here instead of a pin.
 From the repo root (imports are working-directory-relative):
 
 ```bash
-aql av.aql                 # welcome tab; open files with :open
+aql alice.aql                 # welcome tab; open files with :open
 ```
 
 On an aql carrying the proposed `IO.args` word (see
@@ -25,7 +25,7 @@ On an aql carrying the proposed `IO.args` word (see
 viewer was developed against), files pass straight from the shell:
 
 ```bash
-aql av.aql notes.json data.csv
+aql alice.aql notes.json data.csv
 ```
 
 On builds without it, released aql scripts cannot read command-line
@@ -33,12 +33,12 @@ arguments (dx-report §9) — the launcher falls back to the welcome tab
 (`:open` from there), or use the `-e` form:
 
 ```bash
-aql -e 'import "./viewer/av.aql"  Av.run {files: ["test/fixtures/sample.json"]}'
-aql -e 'import "./viewer/av.aql"  Av.run {files: ["a.json", "b.csv"], watch: false}'
+aql -e 'import "./viewer/alice.aql"  Alice.run {files: ["test/fixtures/sample.json"]}'
+aql -e 'import "./viewer/alice.aql"  Alice.run {files: ["a.json", "b.csv"], watch: false}'
 ```
 
 Remote viewing works for free, because the same app map serves both
-runtimes: `Av.serve {tcp: 9700, token: "s3cret"} …` then `aql attach`.
+runtimes: `Alice.serve {tcp: 9700, token: "s3cret"} …` then `aql attach`.
 
 ## Formats
 
@@ -84,7 +84,7 @@ Commands (`:`): `:open <path> [kind]` · `:close` · `:tab <n>` ·
 
 ## Watch
 
-Watching is ON by default for every opened tab (`Av.run {watch:
+Watching is ON by default for every opened tab (`Alice.run {watch:
 false}`, `:watch off`, or `W` to opt out; the status bar shows
 `watching`). A spawned metronome process ticks the app once a second;
 each watched tab's mtime+size stamp is compared and, on change, the
@@ -121,25 +121,25 @@ dx-report §6.
 ## Architecture
 
 ```
-av.aql            root launcher (aql av.aql)
+alice.aql          root launcher (aql alice.aql)
 viewer/
-  av.aql          shell: Tui.run app map, mode routing, watch metronome
-  av-view.aql     pure widget builders (tab strip, tree pane, bars, help)
-  av-nav.aql      pure jless keymap fold over a tab's view state
-  av-tabs.aql     pure tab set + reload re-anchor + reveal
-  av-doc.aql      pure document → row model (splices, search, display)
-  av-fmt.aql      format detection + IO.read loading
+  alice.aql       shell: Tui.run app map, mode routing, watch metronome
+  alice-view.aql  pure widget builders (tab strip, tree pane, bars, help)
+  alice-nav.aql   pure jless keymap fold over a tab's view state
+  alice-tabs.aql  pure tab set + reload re-anchor + reveal
+  alice-doc.aql   pure document → row model (splices, search, display)
+  alice-fmt.aql   format detection + IO.read loading
 ```
 
-Everything except `viewer/av.aql` is terminal-free and unit-tested
-(`test/av_*`). The shell itself is exercised headlessly through
-`Av.feed`, which folds synthetic events through the real update loop —
+Everything except `viewer/alice.aql` is terminal-free and unit-tested
+(`test/alice_*`). The shell itself is exercised headlessly through
+`Alice.feed`, which folds synthetic events through the real update loop —
 including the watch pipeline against real on-disk writes
-(`test/av_app_unit_test.aql`). Rendering and raw key decoding are
+(`test/alice_app_unit_test.aql`). Rendering and raw key decoding are
 covered by a manual PTY smoke:
 
 ```bash
-printf '…keys…' | script -qec "stty cols 130 rows 32; aql av.aql" /dev/null
+printf '…keys…' | script -qec "stty cols 130 rows 32; aql alice.aql" /dev/null
 ```
 
 (a real terminal is nicer). The AQL-runtime pitfalls this codebase had

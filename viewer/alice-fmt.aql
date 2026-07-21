@@ -1,12 +1,12 @@
-# av-fmt: format detection and file loading for the av viewer.
+# alice-fmt: format detection and file loading for the alice viewer.
 #
-# Public surface (the AvFmt namespace exported at the bottom):
+# Public surface (the AliceFmt namespace exported at the bottom):
 #
-#   AvFmt.kind-of path opts   → String   format kind for a path
+#   AliceFmt.kind-of path opts   → String   format kind for a path
 #                                        (opts {kind: "…"} overrides)
-#   AvFmt.load path opts      → Map      {ok: true, doc, kind, text}
+#   AliceFmt.load path opts      → Map      {ok: true, doc, kind, text}
 #                                      | {ok: false, err, code, kind}
-#   AvFmt.kinds               → Map      the extension → kind table
+#   AliceFmt.kinds               → Map      the extension → kind table
 #
 # Parsing itself is delegated to aql's `IO.read`, which infers the
 # format from the file extension (csv, tsv, json, jsonic, json5,
@@ -127,7 +127,7 @@ def load-file fn [
 ]
 
 
-export "AvFmt" {
+export "AliceFmt" {
   kind-of: kind-of/r
   load: load-file/r
   kinds: ext-kind-map
