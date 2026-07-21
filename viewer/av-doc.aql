@@ -1,0 +1,332 @@
+# av-doc: the document → row model for the av viewer.
+#
+# A loaded document (any parsed value: map, list, scalar, or a list of
+# text lines) is presented as a flat list of ROWS — one per visible
+# node — in the way jless renders JSON. A row is a plain map:
+#
+#   { path:  [seg …]          segments from the root: String map keys
+#                             and Integer list indexes ([] = root)
+#     depth: Integer          nesting depth (root = 0)
+#     kind:  String           "map" | "list" | "leaf"
+#     key:   String|Integer|None   the node's own key (none at root)
+#     open:  Boolean          container currently expanded?
+#     n:     Integer          child count (0 for leaves) }
+#
+# Rows are plain maps (never class instances) because aql re-runs a
+# module body per import — distinct class identities per importer would
+# break cross-module row exchange.
+#
+# Public surface (the AvDoc namespace exported at the bottom):
+#
+#   AvDoc.top doc                   → List   initial rows (root + first level)
+#   AvDoc.kids doc row              → List   child rows of a container row
+#   AvDoc.expand doc rows ix        → List   rows with row ix expanded
+#   AvDoc.collapse rows ix          → List   rows with row ix collapsed
+#   AvDoc.subtree-end rows ix       → Integer  first index past ix's subtree
+#   AvDoc.rebuild doc expanded      → List   full rows for an expansion set
+#   AvDoc.expanded-of rows          → Map    expansion set of a row list
+#   AvDoc.value-at doc path         → Any    value at a path (none if absent)
+#   AvDoc.has-path doc path         → Boolean  path resolvable in doc?
+#   AvDoc.parent path               → List   path minus its last segment
+#   AvDoc.path-key path             → String canonical key for a path
+#   AvDoc.path-str path             → String jless-style ".a.b[2]" display
+#   AvDoc.key-str row               → String display form of a row's key
+#   AvDoc.value-str doc row         → String display form of a row's value
+#   AvDoc.search doc needle         → List   paths of matching nodes (≤500)
+#
+# The expansion set (`expanded`) is a Map keyed by AvDoc.path-key with
+# `true` values. Incremental expand/collapse splice rows in place so
+# per-keystroke work stays proportional to the touched subtree, never
+# the whole document; `rebuild` (full walk) is reserved for reload and
+# search jumps.
+#
+# Known deviation (aql Map semantics): aql maps sort their keys, so
+# map children display in sorted-key order, not source order.
+
+
+import "aql:string-util"
+import "aql:struct-util"
+
+
+# --- node inspection -------------------------------------------------
+#
+# Type dispatch is done with multi-signature fns (a Map overload, a
+# List overload, an Any fallback) rather than `is`-guarded if-chains:
+# aql's checker analyses every branch without narrowing on `is`, so a
+# guarded `get` on a value it types as a disjunct is a check ERROR —
+# overloads keep dispatch statically total.
+
+# node-kind and child-count take the OTHER dispatch route — native
+# `is` chains, not overloads: a user multi-sig fn receiving a value
+# forwarded out of an Any param picks its Any overload when the call
+# chain originates inside an `each` body (native words are immune), and
+# these two are exactly the words such chains call.
+def node-kind fn [
+  [v:Any] [String] [
+    if (v is Map) [ "map" ] [ if (v is List) [ "list" ] [ "leaf" ] ]
+  ]
+]
+
+def child-count fn [
+  [v:Any] [Integer] [
+    if (v is Map) [ size (keys (v)) ] [ if (v is List) [ size (v) ] [ 0 ] ]
+  ]
+]
+
+# One path segment into a container; anything unresolvable is none.
+# Native `is` chains, not fn overloads — user multi-sig dispatch loses
+# a value's concrete type in some cross-module / each-body call chains
+# (see the repo dx-report), while native words never do.
+def get-seg fn [
+  [v:Any seg:Any] [Any] [
+    if ((v is Map) and ((seg) is String)) [ do [ (v) get (seg) ] ] [
+      if ((v is List) and ((seg) is Integer)) [
+        if (((seg) gte 0) and ((seg) lt (size (v)))) [ do [ (v) get (seg) ] ] [ none ]
+      ] [ none ]
+    ]
+  ]
+]
+
+# Is one segment present in a container? (A present-but-null map value
+# counts as present.)
+def has-seg fn [
+  [v:Any seg:Any] [Boolean] [
+    if ((v is Map) and ((seg) is String)) [ do [ (v) has (seg) ] ] [
+      if ((v is List) and ((seg) is Integer)) [
+        ((seg) gte 0) and ((seg) lt (size (v)))
+      ] [ false ]
+    ]
+  ]
+]
+
+# Value at a path. A hand-rolled walker (not StructUtil.getpath, whose
+# dotted-string paths would mis-split map keys containing "."). Missing
+# segments yield none.
+def value-at fn [
+  [doc:Any p:List] [Any] [
+    fold [ var [[seg acc] (get-seg (acc) (seg)) ]] (p) (doc)
+  ]
+]
+
+def parent fn [
+  [p:List] [List] [
+    if ((size (p)) lte 1) [ [] ] [ take ((size (p)) sub 1) p ]
+  ]
+]
+
+# True when every segment of the path resolves. The root always
+# resolves; otherwise the parent must resolve to a container holding
+# the final segment (a present-but-null map value counts as present —
+# a null can never be an intermediate, so walking via value-at is
+# exact).
+def has-path fn [
+  [doc:Any p:List] [Boolean] [
+    if ((size (p)) eq 0) [ true ] [
+      has-seg (value-at doc (parent (p))) (p get ((size (p)) sub 1))
+    ]
+  ]
+]
+
+
+# --- rows ------------------------------------------------------------
+
+# NOTE the def-then-return shape: a map literal returned directly from
+# an fn body evaluates its (…) values only after the call's params are
+# torn down (undefined_word); binding it with def evaluates in scope.
+def child-row fn [
+  [cv:Any cp:List d:Integer k:Any] [Map] [
+    def out { path: (cp), depth: (d), kind: (node-kind (cv)), key: (k), open: false, n: (child-count (cv)) }
+    out
+  ]
+]
+
+def root-row fn [
+  [doc:Any] [Map] [
+    def out { path: [], depth: 0, kind: (node-kind doc), key: none, open: false, n: (child-count doc) }
+    out
+  ]
+]
+
+def kids-of fn [
+  [v:Any p:List d:Integer] [List] [
+    if (v is Map) [
+      each [ var [[k] (child-row (get-seg (v) (k)) (push (k) p) (d) (k)) ] ] (keys (v))
+    ] [
+      if (v is List) [
+        each [ var [[ix] (child-row (get-seg (v) (ix)) (push (ix) p) (d) (ix)) ] ] (iota (size (v)))
+      ] [ [] ]
+    ]
+  ]
+]
+
+# Child rows (all closed) of a container row, in display order — map
+# children in aql's sorted-key order, list children by index.
+def kids fn [
+  [doc:Any r:Map] [List] [
+    def p (r get "path")
+    kids-of (value-at doc (p)) (p) ((r get "depth") add 1)
+  ]
+]
+
+def top fn [
+  [doc:Any] [List] [
+    def r (root-row doc)
+    if ((r get "kind") eq "leaf") [ [(r)] ] [ expand doc [(r)] 0 ]
+  ]
+]
+
+
+# --- expand / collapse (incremental splices) -------------------------
+
+# First row index past ix's subtree: the first j > ix whose depth is
+# <= row ix's depth, else the row count.
+def subtree-end fn [
+  [rows:List ix:Integer] [Integer] [
+    def d ((rows get ix) get "depth")
+    def n (size (rows))
+    fold [ var [[j acc]
+      if ((acc) neq (n)) [ (acc) ] [
+        if (((rows get (j)) get "depth") lte (d)) [ (j) ] [ (n) ]
+      ]
+    ]] (range (ix add 1) (n) 1) (n)
+  ]
+]
+
+def expand fn [
+  [doc:Any rows:List ix:Integer] [List] [
+    def r (rows get ix)
+    if ((r get "open") or ((r get "kind") eq "leaf")) [ (rows) ] [
+      def r2 (r set open true)
+      flatten [ (take ix rows) [(r2)] (kids doc (r)) (shed (ix add 1) rows) ]
+    ]
+  ]
+]
+
+def collapse fn [
+  [rows:List ix:Integer] [List] [
+    def r (rows get ix)
+    if ((r get "open") not) [ (rows) ] [
+      def r2 (r set open false)
+      def e (subtree-end rows ix)
+      flatten [ (take ix rows) [(r2)] (shed (e) rows) ]
+    ]
+  ]
+]
+
+
+# --- expansion sets + full rebuild -----------------------------------
+
+def path-key fn [
+  [p:List] [String] [
+    convert String (canon (p))
+  ]
+]
+
+def expanded-of fn [
+  [rows:List] [Map] [
+    fold [ var [[r acc]
+      if (r get "open") [ (acc) set (path-key (r get "path")) true ] [ (acc) ]
+    ]] (rows) {}
+  ]
+]
+
+def emit-rows fn [
+  [doc:Any r:Map expanded:Map] [List] [
+    if ((r get "kind") eq "leaf") [ [(r)] ] [
+      def isopen (((expanded) get (path-key (r get "path"))) otherwise false)
+      if ((isopen) not) [ [(r)] ] [
+        def r2 (r set open true)
+        def below (flatten (each [ var [[c] (emit-rows doc (c) expanded) ] ] (kids doc (r2))))
+        flatten [ [(r2)] (below) ]
+      ]
+    ]
+  ]
+]
+
+# Full rows for a document and an expansion set — the root is always
+# emitted; a container's children render only when its path is in the
+# set. Used on reload and search jumps; keystrokes use the splices.
+def rebuild fn [
+  [doc:Any expanded:Map] [List] [
+    emit-rows doc (root-row doc) (expanded)
+  ]
+]
+
+
+# --- display strings -------------------------------------------------
+
+def path-str fn [
+  [p:List] [String] [
+    fold [ var [[seg acc]
+      if ((seg) is Integer) [ `${acc}[${seg}]` ] [ `${acc}.${seg}` ]
+    ]] (p) ""
+  ]
+]
+
+def key-str fn [
+  [r:Map] [String] [
+    def k (r get "key")
+    if ((k) is Integer) [ `[${k}]` ] [
+      if ((k) is String) [ (k) ] [ "" ]
+    ]
+  ]
+]
+
+def value-str fn [
+  [doc:Any r:Map] [String] [
+    def k (r get "kind")
+    if ((k) eq "map") [ `{…} ${(r get "n")} keys` ] [
+      if ((k) eq "list") [ `[…] ${(r get "n")} items` ] [
+        def v (value-at doc (r get "path"))
+        def s (do [ StructUtil.jsonify (v) ])
+        if ((s) is Error) [ convert String (canon (v)) ] [ convert String (s) ]
+      ]
+    ]
+  ]
+]
+
+
+# --- search ----------------------------------------------------------
+
+def search-node fn [
+  [doc:Any r:Map needle:String copts:Map] [List] [
+    def hitkey (StringUtil.contains needle (key-str (r)) (copts))
+    def hitval (if ((r get "kind") eq "leaf") [
+      StringUtil.contains needle (value-str doc (r)) (copts)
+    ] [ false ])
+    def below (if ((r get "kind") eq "leaf") [ [] ] [
+      flatten (each [ var [[c] (search-node doc (c) needle (copts)) ] ] (kids doc (r)))
+    ])
+    if ((hitkey) or (hitval)) [ unshift (r get "path") (below) ] [ (below) ]
+  ]
+]
+
+# Paths of nodes whose key or leaf value contains the needle, in
+# document order, capped at 500. Smart case: insensitive unless the
+# needle contains an uppercase character.
+def search fn [
+  [doc:Any needle:String] [List] [
+    def copts (if ((StringUtil.lower needle) eq (needle)) [ {cs: "insensitive"} ] [ {} ])
+    def hits (search-node doc (root-row doc) needle (copts))
+    if ((size (hits)) gt 500) [ take 500 hits ] [ (hits) ]
+  ]
+]
+
+
+export "AvDoc" {
+  top: top/r
+  kids: kids/r
+  expand: expand/r
+  collapse: collapse/r
+  subtree-end: subtree-end/r
+  rebuild: rebuild/r
+  expanded-of: expanded-of/r
+  value-at: value-at/r
+  has-path: has-path/r
+  parent: parent/r
+  path-key: path-key/r
+  path-str: path-str/r
+  key-str: key-str/r
+  value-str: value-str/r
+  search: search/r
+}

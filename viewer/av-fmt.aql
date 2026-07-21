@@ -1,0 +1,134 @@
+# av-fmt: format detection and file loading for the av viewer.
+#
+# Public surface (the AvFmt namespace exported at the bottom):
+#
+#   AvFmt.kind-of path opts   → String   format kind for a path
+#                                        (opts {kind: "…"} overrides)
+#   AvFmt.load path opts      → Map      {ok: true, doc, kind, text}
+#                                      | {ok: false, err, code, kind}
+#   AvFmt.kinds               → Map      the extension → kind table
+#
+# Parsing itself is delegated to aql's `IO.read`, which infers the
+# format from the file extension (csv, tsv, json, jsonic, json5,
+# jsonc, toml, yaml, xml, ini, zon, markdown, feed, …) and returns
+# structured data — or the raw text for unmapped extensions. An
+# explicit kind (from `:open <path> <kind>`) is passed through as
+# IO.read's {fmt} option. A text result is split into lines so every
+# file is viewable.
+#
+# Known leniency (documented in the repo dx-report): the jsonic-family
+# parsers accept truncated input without error, so a malformed file
+# can load "successfully" with partial content.
+
+
+import "aql:io"
+import "aql:string-util"
+
+
+# --- extension → kind ------------------------------------------------
+#
+# Mirrors the DefaultExtensions table inside aql's IO.read (fileio.go).
+# Only used for labels and the kind override check — the actual parse
+# dispatch is IO.read's own inference, so drift here is cosmetic.
+
+def ext-kind-map {
+  csv: "csv"
+  tsv: "tsv"
+  json: "json"
+  jsonic: "jsonic"
+  txt: "text"
+  ini: "ini"
+  cfg: "ini"
+  conf: "ini"
+  cnf: "ini"
+  yml: "yaml"
+  yaml: "yaml"
+  toml: "toml"
+  xml: "xml"
+  json5: "json5"
+  jsonc: "jsonc"
+  zon: "zon"
+  md: "markdown"
+  markdown: "markdown"
+  rss: "feed"
+  atom: "feed"
+}
+
+def last-part fn [
+  [sep:String s:String] [String] [
+    def parts (StringUtil.split sep s {keepEmpty: true})
+    if ((size (parts)) eq 0) [""] [ parts get ((size (parts)) sub 1) ]
+  ]
+]
+
+# The lowercase extension of a path ("" when the basename has none).
+def ext-of fn [
+  [path:String] [String] [
+    def bname (last-part "/" path)
+    if (StringUtil.contains "." (bname)) [
+      StringUtil.lower (last-part "." (bname))
+    ] [ "" ]
+  ]
+]
+
+def kind-of fn [
+  [path:String opts:Map] [String] [
+    def k ((opts get "kind") otherwise "")
+    if ((k) eq "") [
+      def e (ext-of path)
+      (ext-kind-map get (e)) otherwise "text"
+    ] [ (k) ]
+  ]
+]
+
+
+# Raw text as a list of lines. Interior empty lines are kept; the one
+# empty element a trailing newline produces is dropped (a text file's
+# final newline is a terminator, not an extra blank line).
+def to-lines fn [
+  [s:String] [List] [
+    def ls (StringUtil.split "\n" s {keepEmpty: true})
+    def n (size (ls))
+    if (((n) gt 0) and ((ls get ((n) sub 1)) eq "")) [ take ((n) sub 1) ls ] [ (ls) ]
+  ]
+]
+
+
+# --- load ------------------------------------------------------------
+#
+# Reads and parses in one step. On success the result map carries the
+# parsed document (`doc`) and its kind; a raw-text read (unmapped
+# extension, or kind "text") is split into a list of lines with empty
+# lines kept, flagged `text: true`. On failure (missing file,
+# unreadable, parser error) the result carries the error message and
+# code instead — the caller decides how to surface it.
+
+def load-file fn [
+  [path:String opts:Map] [Map] [
+    def k (kind-of path opts)
+    def explicit ((opts get "kind") otherwise "")
+    def res (do [
+      if ((explicit) eq "") [
+        IO.read (make Pathon path)
+      ] [
+        IO.read (make Pathon path) {fmt: (k)}
+      ]
+    ])
+    if ((res) is Error) [
+      {ok: false, err: (convert String (res.message)), code: (res.code), kind: (k), doc: none, text: false}
+    ] [
+      if ((res) is String) [
+        {ok: true, doc: (to-lines (res)), kind: "text", text: true, err: none, code: none}
+      ] [
+        {ok: true, doc: (res), kind: (k), text: false, err: none, code: none}
+      ]
+    ]
+  ]
+]
+
+
+export "AvFmt" {
+  kind-of: kind-of/r
+  load: load-file/r
+  kinds: ext-kind-map
+}

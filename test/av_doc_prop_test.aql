@@ -1,0 +1,122 @@
+# av viewer: property tests for viewer/av-doc.aql, in the imperative
+# `Test.check-prop` form (see test/bloom_prop_test.aql for the form's
+# conventions: GEN-BODY leaves one value, PROP-BODY returns a Boolean).
+#
+# Run from the repo root:
+#   aql test/av_doc_prop_test.aql
+
+
+import "aql:test" end
+import "./viewer/av-doc.aql" end
+
+
+# A fixture with maps, lists, nesting, and scalars in all positions.
+def _pdoc {a: {b: {c: [1, {d: 2}], e: "x"}}, lst: [[1, 2], {k: "v"}], z: 5}
+
+# Interpret a random integer stream as expand/collapse operations on a
+# row list: even → expand, odd → collapse, at index (op div 2) mod size.
+def _apply fn [
+  [doc:Any ops:List] [List] [
+    fold [ var [[op rows]
+      def ix ((op div 2) mod (size (rows)))
+      if ((op mod 2) eq 0) [ AvDoc.expand doc (rows) (ix) ] [ AvDoc.collapse (rows) (ix) ]
+    ]] (ops) (AvDoc.top doc)
+  ]
+]
+
+
+# --- P1. Any splice sequence rebuilds exactly -----------------------
+#
+# After any sequence of incremental expand/collapse splices, a full
+# rebuild from the row list's expansion set reproduces the row list
+# byte-for-byte. This pins the equivalence of the two row-construction
+# paths (splice vs rebuild) that the reload re-anchor depends on.
+
+Test.check-prop "splice-rebuild-round-trip"
+  [r.list-of [r.int 0 999] 14]
+  [
+    var [[ops]
+      def rows (_apply (_pdoc) (ops))
+      (AvDoc.rebuild (_pdoc) (AvDoc.expanded-of (rows))) deq (rows)
+    ]
+  ]
+  30 1 0
+end
+
+
+# --- P2. Structural invariants survive any splice sequence ----------
+#
+# The root row stays first (depth 0, empty path) and every row's depth
+# equals its path length — a depth/path mismatch is how a bad splice
+# corrupts the tree shape.
+
+Test.check-prop "row-structural-invariants"
+  [r.list-of [r.int 0 999] 14]
+  [
+    var [[ops]
+      def rows (_apply (_pdoc) (ops))
+      def shape (fold [ var [[rw acc]
+        (acc) and (((rw get "depth") eq (size (rw get "path"))))
+      ]] (rows) true)
+      ((size (rows)) gt 0) and (((rows get 0) get "depth") eq 0) and (shape)
+    ]
+  ]
+  30 2 0
+end
+
+
+# --- P3. expand then collapse at a closed container is identity -----
+
+Test.check-prop "expand-collapse-identity"
+  [r.list-of [r.int 0 999] 8]
+  [
+    var [[ops]
+      def rows (_apply (_pdoc) (ops))
+      def ix ((ops get 0) mod (size (rows)))
+      def rw (rows get (ix))
+      if (((rw get "kind") eq "leaf") or (rw get "open")) [ true ] [
+        (AvDoc.collapse (AvDoc.expand (_pdoc) (rows) (ix)) (ix)) deq (rows)
+      ]
+    ]
+  ]
+  30 3 0
+end
+
+
+# --- P4. subtree-end lands strictly past its row, within bounds -----
+
+Test.check-prop "subtree-end-bounds"
+  [r.list-of [r.int 0 999] 10]
+  [
+    var [[ops]
+      def rows (_apply (_pdoc) (ops))
+      def ix ((ops get 0) mod (size (rows)))
+      def e (AvDoc.subtree-end (rows) (ix))
+      ((e) gt (ix)) and ((e) lte (size (rows)))
+    ]
+  ]
+  30 4 0
+end
+
+
+# --- summary --------------------------------------------------------
+
+print "results:"
+def all-results (Test.results end)
+def _print-results (all-results each [
+  var [[r]
+    def nm (r "name" get)
+    def ok (r "ok" get)
+    def line (if ok [
+      `  pass: ${nm}`
+    ] [
+      `  FAIL: ${nm}  failing-input=${r "failing-input" get}`
+    ])
+    print line
+    0
+  ]
+])
+"---" print
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
+"all green" print
