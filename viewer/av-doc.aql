@@ -278,8 +278,8 @@ def value-str fn [
     if ((k) eq "map") [ `{…} ${(r get "n")} keys` ] [
       if ((k) eq "list") [ `[…] ${(r get "n")} items` ] [
         def v (value-at doc (r get "path"))
-        def s (do [ StructUtil.jsonify (v) ])
-        if ((s) is Error) [ convert String (canon (v)) ] [ convert String (s) ]
+        def s (do [ convert String (canon (v)) ])
+        if ((s) is Error) [ "(unrenderable)" ] [ (s) ]
       ]
     ]
   ]

@@ -161,7 +161,7 @@ def _lines ["first", "second", "", "fourth"]
   "[…] 2 items" (AvDoc.value-str (_doc) (rows2 get 5)) Assert.equal end
   "36" (AvDoc.value-str (_doc) (rows2 get 2)) Assert.equal end
   "true" (AvDoc.value-str (_doc) (rows2 get 3)) Assert.equal end
-  '"ada"' (AvDoc.value-str (_doc) (rows2 get 4)) Assert.equal end
+  "'ada'" (AvDoc.value-str (_doc) (rows2 get 4)) Assert.equal end
 ] "value-str" Test.test end
 
 
@@ -217,8 +217,8 @@ def _lines ["first", "second", "", "fourth"]
   def rows (AvDoc.top (_lines))
   5 (size (rows)) Assert.equal end
   "list" ((rows get 0) get "kind") Assert.equal end
-  '"first"' (AvDoc.value-str (_lines) (rows get 1)) Assert.equal end
-  '""' (AvDoc.value-str (_lines) (rows get 3)) Assert.equal end
+  "'first'" (AvDoc.value-str (_lines) (rows get 1)) Assert.equal end
+  "''" (AvDoc.value-str (_lines) (rows get 3)) Assert.equal end
 ] "text-doc-rows" Test.test end
 
 

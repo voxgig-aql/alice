@@ -1,0 +1,239 @@
+# av viewer: headless integration tests for the shell (viewer/av.aql).
+#
+# Drives the REAL update loop through Av.feed — the same fold Tui.run
+# applies to terminal events — with synthetic event maps, so command
+# mode, tab management, search, and the watch-reload pipeline are all
+# exercised without a terminal. (aql has no AQL-reachable virtual
+# terminal backend; this is the next best surface — only rendering and
+# raw key decoding stay untested here, covered by the PTY smoke in
+# viewer/README.md.)
+#
+# Run from the repo root:
+#   aql test/av_app_unit_test.aql
+
+
+import "aql:test" end
+import "aql:io" end
+import "./viewer/av.aql" end
+import "./viewer/av-tabs.aql" end
+
+
+def _tmp-path "test/fixtures/.tmp-av-app-watch.json"
+
+# Type a string into the app, one key event per character.
+def _type fn [
+  [st:Map s:String] [Map] [
+    fold [ var [[j acc]
+      def c (slice (j) ((j) add 1) s)
+      Av.feed (acc) {tag: "key", key: (c), char: (c)}
+    ]] (range 0 (size (s)) 1) (st)
+  ]
+]
+
+def _key fn [
+  [st:Map k:String] [Map] [
+    Av.feed (st) {tag: "key", key: (k)}
+  ]
+]
+
+# Boot an app on the welcome tab at 100x30.
+def _boot fn [
+  [] [Map] [
+    def app (Av.app {})
+    Av.feed (app get "init") {tag: "init", cols: 100, rows: 30}
+  ]
+]
+
+
+# --- boot: welcome tab, browse mode ---------------------------------
+
+[
+  def st (_boot)
+  1 (size (st get "tabs")) Assert.equal end
+  "browse" (st get "mode") Assert.equal end
+  "(welcome)" ((AvTabs.active (st)) get "path") Assert.equal end
+] "boot-welcome" Test.test end
+
+
+# --- command mode: :open loads a tab, watching by default ------------
+
+[
+  def st (_boot)
+  def st2 (_key (st) ":")
+  "command" (st2 get "mode") Assert.equal end
+  def st3 (_type (st2) "open test/fixtures/sample.json")
+  def st4 (_key (st3) "enter")
+  "browse" (st4 get "mode") Assert.equal end
+  2 (size (st4 get "tabs")) Assert.equal end
+  1 (st4 get "active") Assert.equal end
+  def tb (AvTabs.active (st4))
+  "json" (tb get "kind") Assert.equal end
+  true (tb get "watch") Assert.equal end
+  3 (size (tb get "rows")) Assert.equal end
+] "open-command-watches" Test.test end
+
+
+# --- unknown command reports, bad path keeps a tab -------------------
+
+[
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") "frobnicate") "enter")
+  "unknown command: frobnicate" (st2 get "msg") Assert.equal end
+  def st3 (_key (_type (_key (st2) ":") "open no/such/file.json") "enter")
+  2 (size (st3 get "tabs")) Assert.equal end
+  # a failed open still watches: the tab reloads if the file appears
+  true ((AvTabs.active (st3)) get "watch") Assert.equal end
+] "command-errors" Test.test end
+
+
+# --- navigation keys reach the active tab ----------------------------
+
+[
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") "open test/fixtures/sample.json") "enter")
+  def st3 (_key (_key (st2) "j") "l")
+  def tb (AvTabs.active (st3))
+  1 (tb get "focus") Assert.equal end
+  true (((tb get "rows") get 1) get "open") Assert.equal end
+  true ((size (tb get "rows")) gt 3) Assert.equal end
+] "nav-reaches-tab" Test.test end
+
+
+# --- tab switching ---------------------------------------------------
+
+[
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") "open test/fixtures/sample.csv") "enter")
+  1 (st2 get "active") Assert.equal end
+  def st3 (_key (st2) "tab")
+  0 (st3 get "active") Assert.equal end
+  def st4 (_key (st3) "backtab")
+  1 (st4 get "active") Assert.equal end
+  def st5 (_key (_type (_key (st4) ":") "tab 1") "enter")
+  0 (st5 get "active") Assert.equal end
+] "tab-switching" Test.test end
+
+
+# --- search + n cycling ---------------------------------------------
+
+[
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") "open test/fixtures/sample.json") "enter")
+  def st3 (_key (_type (_key (st2) "/") "title") "enter")
+  2 (size (st3 get "matches")) Assert.equal end
+  "[1/2]" (st3 get "msg") Assert.equal end
+  def tb (AvTabs.active (st3))
+  "title" (((tb get "rows") get (tb get "focus")) get "key") Assert.equal end
+  def st4 (_key (st3) "n")
+  "[2/2]" (st4 get "msg") Assert.equal end
+  def st5 (_key (st4) "n")
+  "[1/2]" (st5 get "msg") Assert.equal end
+  def st6 (_key (st5) "N")
+  "[2/2]" (st6 get "msg") Assert.equal end
+] "search-and-cycle" Test.test end
+
+
+# --- watch pipeline: on-disk change + file-changed event -------------
+#
+# The real fs write happens between two feeds; the synthetic
+# {tag: "file-changed"} stands in for the IO.watch delivery (the
+# fsnotify hop itself is asynchronous and pinned upstream).
+
+[
+  IO.write (make Pathon (_tmp-path)) "{a: {b: 1}, c: [10, 20]}" end drop
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") `open ${_tmp-path} jsonic`) "enter")
+  def tb (AvTabs.active (st2))
+  true (tb get "watch") Assert.equal end
+  # focus .c, expand it, focus .c[1]
+  def st3 (_key (_key (_key (_key (_key (st2) "j") "J") "l") "j") "j")
+  def tb3 (AvTabs.active (st3))
+  "c" (((tb3 get "rows") get 2) get "key") Assert.equal end
+  4 (tb3 get "focus") Assert.equal end
+  # change the file on disk, then deliver the change event
+  IO.write (make Pathon (_tmp-path)) "{a: {b: 99}, c: [10, 21]}" end drop
+  def st4 (Av.feed (st3) {tag: "file-changed", op: "write"})
+  def tb4 (AvTabs.active (st4))
+  # document reloaded…
+  21 ((((tb4 get "doc") get "c") get 1)) Assert.equal end
+  # …and the view position survived: same focused path, same screen line
+  true ((((tb4 get "rows") get (tb4 get "focus")) get "path") deq ["c", 1]) Assert.equal end
+  ((tb3 get "focus") sub (tb3 get "scroll"))
+    ((tb4 get "focus") sub (tb4 get "scroll")) Assert.equal end
+  true ((tb4 get "err") is None) Assert.equal end
+  1 (tb4 get "gen") Assert.equal end
+] "watch-reload-retains-position" Test.test end
+
+
+# --- watch reload: broken syntax keeps the old view ------------------
+
+[
+  IO.write (make Pathon (_tmp-path)) "{a: 1}" end drop
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") `open ${_tmp-path} json`) "enter")
+  def tb2 (AvTabs.active (st2))
+  # remove the file: reload fails, view survives, tab marked gone
+  IO.remove (make Pathon (_tmp-path)) end drop
+  def st3 (Av.feed (st2) {tag: "file-changed", op: "remove"})
+  def tb3 (AvTabs.active (st3))
+  true ((tb3 get "rows") deq (tb2 get "rows")) Assert.equal end
+  false ((tb3 get "err") is None) Assert.equal end
+  true (tb3 get "gone") Assert.equal end
+] "watch-gone-keeps-view" Test.test end
+
+
+# --- W toggles, :watch off stops -------------------------------------
+
+[
+  IO.write (make Pathon (_tmp-path)) "{a: 1}" end drop
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") `open ${_tmp-path}`) "enter")
+  true ((AvTabs.active (st2)) get "watch") Assert.equal end
+  def st3 (_key (st2) "W")
+  false ((AvTabs.active (st3)) get "watch") Assert.equal end
+  def st4 (_key (st3) "W")
+  true ((AvTabs.active (st4)) get "watch") Assert.equal end
+  def st5 (_key (_type (_key (st4) ":") "watch off") "enter")
+  false ((AvTabs.active (st5)) get "watch") Assert.equal end
+  IO.remove (make Pathon (_tmp-path)) end drop
+] "watch-toggles" Test.test end
+
+
+# --- q closes tabs; the last q yields the quit marker ----------------
+
+[
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") "open test/fixtures/sample.json") "enter")
+  def st3 (_key (st2) "q")
+  1 (size (st3 get "tabs")) Assert.equal end
+  "(welcome)" ((AvTabs.active (st3)) get "path") Assert.equal end
+] "q-closes-tab" Test.test end
+
+
+# --- help overlay ----------------------------------------------------
+
+[
+  def st (_boot)
+  def st2 (_key (st) "?")
+  "help" (st2 get "mode") Assert.equal end
+  def st3 (_key (st2) "j")
+  "browse" (st3 get "mode") Assert.equal end
+] "help-overlay" Test.test end
+
+
+# --- yank prints to the message line --------------------------------
+
+[
+  def st (_boot)
+  def st2 (_key (_type (_key (st) ":") "open test/fixtures/sample.json") "enter")
+  def st3 (_key (_key (st2) "j") "y")
+  ".store = {…} 4 keys" (st3 get "msg") Assert.equal end
+] "yank-to-message" Test.test end
+
+
+# --- summary --------------------------------------------------------
+
+"---" print
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
+"all green" print

@@ -1,0 +1,15 @@
+# av — an aql file viewer (jless-style), with tabs and file watching.
+#
+# Launch from the repo root:
+#   aql av.aql                # welcome tab; open files with :open
+#
+# aql scripts cannot read command-line arguments (see dx-report), so to
+# open files straight from the shell use `aql -e`:
+#   aql -e 'import "./viewer/av.aql"  Av.run {files: ["test/fixtures/sample.json"]}'
+#
+# Full keymap: press ? inside, or see viewer/README.md.
+
+import "./viewer/av.aql"
+
+# Bind the final state so it does not auto-print after quit.
+def _final (Av.run {})

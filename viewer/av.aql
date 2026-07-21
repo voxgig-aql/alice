@@ -1,0 +1,452 @@
+# av: the shell of the av viewer — the only module that touches the
+# terminal. Elm-style app map over aql:tui's Tui.run (the todo-tui.aql
+# idiom): pure `update` folds events into a state map, pure `view`
+# (av-view) renders it, and background work (file watchers) arrives as
+# ordinary mailbox messages sent to the registered "tui" process.
+#
+#   import "./viewer/av.aql"
+#   Av.run {}                                     # welcome tab, :open files
+#   Av.run {files: ["a.json", "b.csv"]}           # open files (watch ON)
+#   Av.run {files: ["big.json"], watch: false}    # without auto-reload
+#   Av.serve {tcp: 9700, token: "s3cret"} …       # remote viewing (aql attach)
+#
+# aql has no script argv (see the repo dx-report), so passing files
+# from a shell means `aql -e`:
+#   aql -e 'import "./viewer/av.aql"  Av.run {files: ["test/fixtures/sample.json"]}'
+#
+# App state:
+#   { tabs, active, next          the tab set (av-tabs)
+#     mode                        "browse" | "command" | "search" | "help"
+#     cmd                         Tui.input widget for : and / lines
+#     matches, mi                 current search hits + cursor
+#     msg                         transient status message
+#     dim                         {cols rows}
+#     watch-default               new tabs start watching? (default true) }
+#
+# Watch pipeline: IO.watch on the file's PARENT directory with a
+# {match: basename} filter (editors replace files via temp+rename; a
+# dir watch survives that, a file watch dies) → the module-level
+# `notify-change` body sends {tag: "file-changed"} to "tui" → update
+# reloads every watched tab via AvTabs.reanchor, which retains the
+# view position. IO.watch bodies run later, in a forked runtime: they
+# can only reference MODULE-LEVEL words, never fn locals.
+
+
+import "aql:tui"
+import "aql:io"
+import "aql:time-util"
+import "aql:math-util"
+import "aql:string-util"
+import "./av-fmt.aql"
+import "./av-doc.aql"
+import "./av-nav.aql"
+import "./av-tabs.aql"
+import "./av-view.aql"
+
+
+# --- small helpers ---------------------------------------------------
+
+def view-h fn [
+  [state:Map] [Integer] [
+    def hh (((state get "dim") get "rows") otherwise 24)
+    MathUtil.max 1 ((hh) sub 3)
+  ]
+]
+
+# Typed coercions: `convert` needs a statically-Scalar value and the
+# checker treats an Any-typed name inside `${…}` as a call, so these
+# wrappers pin the types the checker needs.
+def as-str fn [
+  [x:Scalar] [String] [ convert String x ]
+]
+
+def as-int fn [
+  [x:Scalar] [Integer] [ convert Integer x ]
+]
+
+def as-list fn [
+  [x:Any] [List] [ (x) otherwise [] ]
+]
+
+def row-at fn [
+  [rows:List j:Integer] [Map] [ rows get (j) ]
+]
+
+def has-ctrl fn [
+  [ev:Map] [Boolean] [
+    fold [ var [[m acc] (acc) or ((m) eq "ctrl") ]] ((ev get "mods") otherwise []) false
+  ]
+]
+
+# --- watch plumbing --------------------------------------------------
+#
+# Watching is POLL-based: a spawned metronome process ticks the app
+# once a second and `update` compares each watched tab's mtime+size
+# stamp against a fresh IO.stat, reloading through AvTabs.reanchor on
+# change. fsnotify (IO.watch) is NOT used: its callback fork never runs
+# while Tui.run's driver owns the runtime, so events are simply never
+# delivered to a live TUI (headless scripts receive them fine — see the
+# repo dx-report; the metronome + send path is the upstream-supported
+# way for background work to reach the "tui" process). Same-second,
+# same-size edits are invisible to the stamp — an accepted limitation.
+
+# One metronome per app run, spawned from on-init. It must reference
+# only module-level words: it runs in its own process. It dies with the
+# app: send to an unregistered "tui" raises, ending the loop body.
+def av-metronome fn [
+  [] [Integer] [
+    for 1000000000 [
+      TimeUtil.sleep 1000
+      send {tag: "tick"} "tui"
+      0
+    ]
+    0
+  ]
+]
+
+# The watch stamp: mtime seconds and byte size folded into one Integer
+# (mtime * 2^20 + size mod 2^20) — enough to detect any timed or
+# size-changing edit. 0 = unreadable/absent.
+def stamp-of fn [
+  [path:String] [Integer] [
+    def st (do [ IO.stat (make Pathon (path)) ])
+    if (((st) is Error) or ((st) is None)) [ 0 ] [
+      def mt ((st get "mtime") otherwise 0)
+      def sz ((st get "size") otherwise 0)
+      ((mt) mul 1048576) add ((sz) mod 1048576)
+    ]
+  ]
+]
+
+def start-watch fn [
+  [tab:Map] [Map] [
+    if ((tab get "path") eq "(welcome)") [ (tab) ] [
+      ((tab) set watch true) set stamp (stamp-of (tab get "path"))
+    ]
+  ]
+]
+
+def stop-watch fn [
+  [tab:Map] [Map] [
+    (tab) set watch false
+  ]
+]
+
+# Reload one tab, marking it gone when the file vanished, and restamp.
+def reload-watched fn [
+  [tab:Map vh:Integer] [Map] [
+    def res (AvFmt.load (tab get "path") ((tab get "opts") otherwise {}))
+    def t2 (AvTabs.reanchor (tab) (res) (vh))
+    def t3 (if (res get "ok") [ (t2) ] [
+      def st (do [ IO.stat (make Pathon (tab get "path")) ])
+      (t2) set gone (((st) is None) or ((st) is Error))
+    ])
+    (t3) set stamp (stamp-of (tab get "path"))
+  ]
+]
+
+# A metronome tick: reload every watched tab whose stamp moved.
+def on-tick fn [
+  [state:Map] [Map] [
+    def vh (view-h state)
+    def tabs2 (each [ var [[tb]
+      (if ((tb get "watch") otherwise false) [
+        def now2 (stamp-of (tb get "path"))
+        if ((now2) eq ((tb get "stamp") otherwise 0)) [ (tb) ] [ reload-watched (tb) (vh) ]
+      ] [ (tb) ])
+    ]] (state get "tabs"))
+    (state) set tabs (tabs2)
+  ]
+]
+
+def watch-all fn [
+  [state:Map] [Map] [
+    def tabs2 (each [ var [[tb] (start-watch (tb)) ]] (state get "tabs"))
+    (state) set tabs (tabs2)
+  ]
+]
+
+
+# --- commands --------------------------------------------------------
+
+def close-or-quit fn [
+  [state:Map] [Map] [
+    def tab (AvTabs.active state)
+    def _ (stop-watch (tab))
+    def s2 (AvTabs.close state)
+    if ((size (s2 get "tabs")) eq 0) [ Tui.quit (s2) ] [ (s2) ]
+  ]
+]
+
+def cmd-open fn [
+  [state:Map parts:List] [Map] [
+    if ((size (parts)) lt 2) [ (state) set msg "usage: :open <path> [kind]" ] [
+      def pth (as-str (parts get 1))
+      def opts (if ((size (parts)) gt 2) [ {kind: (as-str (parts get 2))} ] [ {} ])
+      def s2 (AvTabs.open state (pth) (opts))
+      def tab (AvTabs.active (s2))
+      def wd (s2 get "watch-default")
+      def tabw (if (wd) [ start-watch (tab) ] [ (tab) ])
+      def s3 (AvTabs.put-active (s2) (tabw))
+      def err ((AvTabs.active (s3)) get "err")
+      if ((err) is None) [ (s3) ] [ (s3) set msg `open: ${(as-str (err))}` ]
+    ]
+  ]
+]
+
+def cmd-tab fn [
+  [state:Map parts:List] [Map] [
+    if ((size (parts)) lt 2) [ (state) set msg "usage: :tab <n>" ] [
+      def n (do [ as-int (parts get 1) ])
+      if ((n) is Error) [ (state) set msg "tab: not a number" ] [
+        AvTabs.activate state ((n) sub 1)
+      ]
+    ]
+  ]
+]
+
+def cmd-watch fn [
+  [state:Map parts:List] [Map] [
+    def want (if ((size (parts)) gt 1) [ as-str (parts get 1) ] [ "on" ])
+    def tab (AvTabs.active state)
+    if ((want) eq "off") [
+      AvTabs.put-active state (stop-watch (tab))
+    ] [
+      def t2 (start-watch (tab))
+      def s2 (AvTabs.put-active state (t2))
+      if (t2 get "watch") [ (s2) ] [ (s2) set msg "watch: nothing to watch here" ]
+    ]
+  ]
+]
+
+def run-command fn [
+  [state:Map line:String] [Map] [
+    def parts (StringUtil.split " " (line))
+    def cmd (as-str ((parts get 0) otherwise ""))
+    case (cmd) [
+      "open"  [ drop cmd-open state (parts) ]
+      "close" [ drop close-or-quit state ]
+      "tab"   [ drop cmd-tab state (parts) ]
+      "next"  [ drop AvTabs.next state ]
+      "prev"  [ drop AvTabs.prev state ]
+      "watch" [ drop cmd-watch state (parts) ]
+      "help"  [ drop (state) set mode "help" ]
+      "quit"  [ drop Tui.quit (state) ]
+      "qa"    [ drop Tui.quit (state) ]
+      "q"     [ drop close-or-quit state ]
+      ""      [ drop (state) ]
+      ((state) set msg `unknown command: ${cmd}`)
+    ]
+  ]
+]
+
+
+# --- search ----------------------------------------------------------
+
+def run-search fn [
+  [state:Map needle:String] [Map] [
+    if ((needle) eq "") [ (state) ] [
+      def tab (AvTabs.active state)
+      def hits (AvDoc.search (tab get "doc") (needle))
+      if ((size (hits)) eq 0) [
+        ((state) set matches []) set msg `no match: ${needle}`
+      ] [
+        def s2 (((state) set matches (hits)) set mi 0)
+        def s3 (AvTabs.put-active (s2) (AvTabs.reveal (tab) (hits get 0) (view-h state)))
+        (s3) set msg `[1/${(size (hits))}]`
+      ]
+    ]
+  ]
+]
+
+def next-match fn [
+  [state:Map delta:Integer] [Map] [
+    def hits (state get "matches")
+    def n (size (hits))
+    if ((n) eq 0) [ (state) set msg "no matches" ] [
+      def mi2 ((((state get "mi") add (delta)) add (n)) mod (n))
+      def s2 ((state) set mi (mi2))
+      def tab (AvTabs.active (s2))
+      def s3 (AvTabs.put-active (s2) (AvTabs.reveal (tab) (hits get (mi2)) (view-h state)))
+      (s3) set msg `[${(mi2) add 1}/${n}]`
+    ]
+  ]
+]
+
+def search-current-key fn [
+  [state:Map] [Map] [
+    def tab (AvTabs.active state)
+    def rw (row-at (tab get "rows") (tab get "focus"))
+    def ks (AvDoc.key-str (rw))
+    if ((ks) eq "") [ (state) set msg "no key under cursor" ] [ run-search state (ks) ]
+  ]
+]
+
+def yank-to-msg fn [
+  [state:Map] [Map] [
+    def tab (AvTabs.active state)
+    def rw (row-at (tab get "rows") (tab get "focus"))
+    def pth (as-str (AvDoc.path-str (rw get "path")))
+    def vv (as-str (AvDoc.value-str (tab get "doc") (rw)))
+    (state) set msg `${pth} = ${vv}`
+  ]
+]
+
+
+# --- key routing -----------------------------------------------------
+
+def enter-mode fn [
+  [state:Map mode2:String prompt:String] [Map] [
+    def s2 ((state) set mode (mode2))
+    (s2) set cmd (Tui.input "" {placeholder: (prompt)})
+  ]
+]
+
+def mode-line-key fn [
+  [state:Map ev:Map] [Map] [
+    def k ((ev get "key") otherwise "")
+    if ((k) eq "esc") [ ((state) set mode "browse") set msg "" ] [
+      if ((k) eq "enter") [
+        def line (as-str (((state get "cmd") get "value") otherwise ""))
+        def was (state get "mode")
+        def s2 ((state) set mode "browse")
+        if ((was) eq "command") [ run-command (s2) (line) ] [ run-search (s2) (line) ]
+      ] [
+        (state) set cmd (Tui.edit (state get "cmd") ev)
+      ]
+    ]
+  ]
+]
+
+def browse-key fn [
+  [state:Map ev:Map] [Map] [
+    def vh (view-h state)
+    if (has-ctrl ev) [
+      AvTabs.put-active state (AvNav.key (AvTabs.active state) ev (vh))
+    ] [
+      def k ((ev get "key") otherwise "")
+      case (k) [
+        "q"       [ drop close-or-quit state ]
+        ":"       [ drop enter-mode state "command" ":" ]
+        "/"       [ drop enter-mode state "search" "/" ]
+        "?"       [ drop (state) set mode "help" ]
+        "tab"     [ drop AvTabs.next state ]
+        "backtab" [ drop AvTabs.prev state ]
+        "W"       [ drop cmd-watch state (if ((AvTabs.active state) get "watch") [ ["watch", "off"] ] [ ["watch", "on"] ]) ]
+        "r"       [ drop AvTabs.put-active state (reload-watched (AvTabs.active state) (vh)) ]
+        "n"       [ drop next-match state 1 ]
+        "N"       [ drop next-match state -1 ]
+        "y"       [ drop yank-to-msg state ]
+        "*"       [ drop search-current-key state ]
+        (AvTabs.put-active state (AvNav.key (AvTabs.active state) ev (vh)))
+      ]
+    ]
+  ]
+]
+
+def on-key fn [
+  [state:Map ev:Map] [Map] [
+    def mode (state get "mode")
+    if ((mode) eq "help") [ (state) set mode "browse" ] [
+      if (((mode) eq "command") or ((mode) eq "search")) [
+        mode-line-key state ev
+      ] [ browse-key ((state) set msg "") ev ]
+    ]
+  ]
+]
+
+
+# --- the app ---------------------------------------------------------
+
+def on-init fn [
+  [state:Map ev:Map] [Map] [
+    def s2 ((state) set dim {cols: (ev get "cols"), rows: (ev get "rows")})
+    spawn [ av-metronome ]
+    drop
+    if (s2 get "watch-default") [ watch-all (s2) ] [ (s2) ]
+  ]
+]
+
+def av-update fn [
+  [state:Map ev:Map] [Map] [
+    def tag ((ev get "tag") otherwise "")
+    case (tag) [
+      "init"         [ drop on-init state ev ]
+      "resize"       [ drop (state) set dim {cols: (ev get "cols"), rows: (ev get "rows")} ]
+      "key"          [ drop on-key state ev ]
+      "tick"         [ drop on-tick state ]
+      "file-changed" [ drop on-tick state ]
+      (state)
+    ]
+  ]
+]
+
+def av-render fn [
+  [state:Map] [Map] [
+    AvView.render state
+  ]
+]
+
+def open-welcome fn [
+  [state:Map] [Map] [
+    def doc {
+      av: "an aql file viewer (jless-style)"
+      open: "use  :open <path> [kind]  to load a file"
+      formats: "json jsonic json5 jsonc csv tsv toml yaml xml ini zon markdown text"
+      keys: "? shows the full keymap · q quits"
+    }
+    def tb {
+      id: 0, path: "(welcome)", kind: "-", doc: (doc), rows: (AvDoc.top (doc)),
+      focus: 0, scroll: 0, xoff: 0, pending: "", watch: false,
+      err: none, gone: false, gen: 0, text: false, opts: {}
+    }
+    def s2 ((state) set tabs [(tb)])
+    (s2) set active 0
+  ]
+]
+
+def av-app fn [
+  [opts:Map] [Map] [
+    def files (as-list (opts get "files"))
+    def wd ((opts get "watch") otherwise true)
+    def s0 {
+      tabs: [], active: 0, next: 1, mode: "browse", msg: "",
+      cmd: (Tui.input "" {}), dim: {cols: 80, rows: 24},
+      matches: [], mi: 0, watch-default: (wd)
+    }
+    def s1 (fold [ var [[f acc] (AvTabs.open (acc) (as-str (f)) {}) ]] (files) (s0))
+    def s2 (if ((size (s1 get "tabs")) eq 0) [ open-welcome (s1) ] [ (s1) ])
+    def out { init: (s2), update: av-update/r, view: av-render/r }
+    out
+  ]
+]
+
+# Headless driver: fold one event into an app state exactly as Tui.run
+# would. Exists so integration tests can replay key/watch scenarios
+# without a terminal (an /r-parked update fn called from another module
+# cannot resolve this module's private words; a module wrapper can).
+def feed fn [
+  [state:Map ev:Map] [Map] [
+    av-update state ev
+  ]
+]
+
+def av-run fn [
+  [opts:Map] [Map] [
+    Tui.run (av-app opts)
+  ]
+]
+
+def av-serve fn [
+  [opts:Map] [Map] [
+    Tui.serve {tcp: (opts get "tcp"), token: (opts get "token")} (av-app opts)
+  ]
+]
+
+
+export "Av" {
+  app: av-app/r
+  feed: feed/r
+  run: av-run/r
+  serve: av-serve/r
+}

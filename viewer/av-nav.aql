@@ -1,0 +1,351 @@
+# av-nav: the jless-style keymap as a pure fold over a tab's view
+# state. No terminal words — fully unit-testable.
+#
+# A TAB map carries (at least) the view-state fields this module reads
+# and writes:
+#
+#   { doc, rows, focus, scroll, xoff, pending, … }
+#
+# Public surface (the AvNav namespace exported at the bottom):
+#
+#   AvNav.key tab ev vh     → tab'   fold one key event into a tab
+#                                    (vh = tree-pane height in rows)
+#   AvNav.follow tab vh     → tab'   clamp focus + scroll into view
+#   AvNav.index-of tab path → Integer  row index of a path (-1 absent)
+#
+# Key map (jless subset + noted deviations):
+#   j / down    focus down          k / up      focus up
+#   l / right   expand / first kid  h / left    collapse / to parent
+#   H           to parent           J / K       next / prev sibling
+#   w / b       next / prev depth change
+#   space       toggle collapse     c           collapse (leaf → parent)
+#   e           expand              E           deep-expand (row-capped)
+#   g / G       first / last row    0 / $       first / last sibling
+#   C-f C-b     page down / up      C-d C-u     half page down / up
+#   C-e C-y     scroll only         z then z/t/b  center / top / bottom
+#   . / ,       horizontal value scroll right / left
+#
+# Quit, tabs, command / search modes are the shell's concern (av.aql);
+# events not handled here return the tab unchanged.
+
+
+import "aql:math-util"
+import "./av-doc.aql"
+
+
+# --- small helpers ---------------------------------------------------
+
+def clampi fn [
+  [x:Integer lo:Integer hi:Integer] [Integer] [
+    if ((x) lt (lo)) [ (lo) ] [ if ((x) gt (hi)) [ (hi) ] [ (x) ] ]
+  ]
+]
+
+def has-ctrl fn [
+  [ev:Map] [Boolean] [
+    fold [ var [[m acc] (acc) or ((m) eq "ctrl") ]] ((ev get "mods") otherwise []) false
+  ]
+]
+
+# Focus fx, then pull the scroll window along so focus stays visible.
+def with-focus fn [
+  [tab:Map fx:Integer vh:Integer] [Map] [
+    def n (size (tab get "rows"))
+    def f (clampi fx 0 (MathUtil.max 0 ((n) sub 1)))
+    def sc0 (tab get "scroll")
+    def sc1 (if ((f) lt (sc0)) [ (f) ] [
+      if ((f) gte ((sc0) add (vh))) [ ((f) sub (vh)) add 1 ] [ (sc0) ]
+    ])
+    def sc (clampi (sc1) 0 (MathUtil.max 0 ((n) sub (vh))))
+    ((tab) set focus (f)) set scroll (sc)
+  ]
+]
+
+# Replace the row list, keeping focus and scroll in bounds.
+def with-rows fn [
+  [tab:Map rows2:List vh:Integer] [Map] [
+    with-focus ((tab) set rows (rows2)) (tab get "focus") vh
+  ]
+]
+
+def follow fn [
+  [tab:Map vh:Integer] [Map] [
+    with-focus tab (tab get "focus") vh
+  ]
+]
+
+# Row index of an exact path, -1 when not visible.
+def index-of fn [
+  [tab:Map p:List] [Integer] [
+    def rows (tab get "rows")
+    def key (AvDoc.path-key (p))
+    fold [ var [[j acc]
+      if ((acc) gte 0) [ (acc) ] [
+        if ((AvDoc.path-key ((rows get (j)) get "path")) eq (key)) [ (j) ] [ -1 ]
+      ]
+    ]] (range 0 (size (rows)) 1) -1
+  ]
+]
+
+
+# --- structural moves ------------------------------------------------
+
+# Row index of the focused row's parent (fx when already at the root).
+def parent-index fn [
+  [rows:List fx:Integer] [Integer] [
+    def d ((rows get fx) get "depth")
+    fold [ var [[j acc]
+      if (((rows get (j)) get "depth") lt (d)) [ (j) ] [ (acc) ]
+    ]] (range 0 (fx) 1) (fx)
+  ]
+]
+
+# Previous sibling (same depth, same parent), -1 when none.
+def prev-sibling fn [
+  [rows:List fx:Integer] [Integer] [
+    def d ((rows get fx) get "depth")
+    fold [ var [[j acc]
+      def dj ((rows get (j)) get "depth")
+      if ((dj) lt (d)) [ -1 ] [ if ((dj) eq (d)) [ (j) ] [ (acc) ] ]
+    ]] (range 0 (fx) 1) -1
+  ]
+]
+
+# Next sibling (same depth, same parent), -1 when none.
+def next-sibling fn [
+  [rows:List fx:Integer] [Integer] [
+    def d ((rows get fx) get "depth")
+    def e (AvDoc.subtree-end (rows) (fx))
+    if ((e) lt (size (rows))) [
+      if (((rows get (e)) get "depth") eq (d)) [ (e) ] [ -1 ]
+    ] [ -1 ]
+  ]
+]
+
+# Last sibling in the focused row's group. Encoding: a negative
+# accumulator freezes the scan once the group's parent boundary passes.
+def last-sibling fn [
+  [rows:List fx:Integer] [Integer] [
+    def d ((rows get fx) get "depth")
+    def n (size (rows))
+    def r (fold [ var [[j acc]
+      if ((acc) lt 0) [ (acc) ] [
+        def dj ((rows get (j)) get "depth")
+        if ((dj) lt (d)) [ 0 sub ((acc) add 1) ] [
+          if ((dj) eq (d)) [ (j) ] [ (acc) ]
+        ]
+      ]
+    ]] (range ((fx) add 1) (n) 1) (fx))
+    if ((r) lt 0) [ (0 sub (r)) sub 1 ] [ (r) ]
+  ]
+]
+
+# Next / previous row at a different depth ("w" / "b").
+def next-depth-change fn [
+  [rows:List fx:Integer] [Integer] [
+    def d ((rows get fx) get "depth")
+    def n (size (rows))
+    fold [ var [[j acc]
+      if ((acc) gte 0) [ (acc) ] [
+        if (((rows get (j)) get "depth") neq (d)) [ (j) ] [ -1 ]
+      ]
+    ]] (range ((fx) add 1) (n) 1) -1
+  ]
+]
+
+def prev-depth-change fn [
+  [rows:List fx:Integer] [Integer] [
+    def d ((rows get fx) get "depth")
+    fold [ var [[j acc]
+      if (((rows get (j)) get "depth") neq (d)) [ (j) ] [ (acc) ]
+    ]] (range 0 (fx) 1) -1
+  ]
+]
+
+
+# --- expand / collapse actions ---------------------------------------
+
+def do-expand fn [
+  [tab:Map vh:Integer] [Map] [
+    def fx (tab get "focus")
+    with-rows tab (AvDoc.expand (tab get "doc") (tab get "rows") (fx)) vh
+  ]
+]
+
+def do-collapse fn [
+  [tab:Map vh:Integer] [Map] [
+    def rows (tab get "rows")
+    def fx (tab get "focus")
+    def rw (rows get (fx))
+    if (rw get "open") [
+      with-rows tab (AvDoc.collapse (rows) (fx)) vh
+    ] [
+      # closed or leaf: jless moves to (and collapses at) the parent
+      def pi (parent-index (rows) (fx))
+      if ((pi) eq (fx)) [ (tab) ] [
+        with-rows (with-focus tab (pi) vh) (AvDoc.collapse (rows) (pi)) vh
+      ]
+    ]
+  ]
+]
+
+def do-toggle fn [
+  [tab:Map vh:Integer] [Map] [
+    def rw ((tab get "rows") get (tab get "focus"))
+    if (rw get "open") [
+      with-rows tab (AvDoc.collapse (tab get "rows") (tab get "focus")) vh
+    ] [ do-expand tab vh ]
+  ]
+]
+
+# Expand every container in the focused subtree, bounded by fuel and a
+# hard row cap (interpreted aql: unbounded deep-expand of a huge file
+# would freeze the loop).
+def deep-expand fn [
+  [tab:Map vh:Integer fuel:Integer] [Map] [
+    def rows (tab get "rows")
+    def fx (tab get "focus")
+    def e (AvDoc.subtree-end (rows) (fx))
+    def cand (fold [ var [[j acc]
+      if ((acc) gte 0) [ (acc) ] [
+        def rw (rows get (j))
+        if (((rw get "kind") neq "leaf") and ((rw get "open") not)) [ (j) ] [ -1 ]
+      ]
+    ]] (range (fx) (e) 1) -1)
+    if (((cand) lt 0) or ((fuel) lte 0) or ((size (rows)) gt 5000)) [ (tab) ] [
+      deep-expand (with-rows tab (AvDoc.expand (tab get "doc") (rows) (cand)) vh) vh ((fuel) sub 1)
+    ]
+  ]
+]
+
+
+# --- move actions ----------------------------------------------------
+
+def move-by fn [
+  [tab:Map delta:Integer vh:Integer] [Map] [
+    with-focus tab ((tab get "focus") add (delta)) vh
+  ]
+]
+
+def move-to-maybe fn [
+  [tab:Map target:Integer vh:Integer] [Map] [
+    if ((target) lt 0) [ (tab) ] [ with-focus tab (target) vh ]
+  ]
+]
+
+# l / right: expand a closed container, else step into the first child.
+def move-in fn [
+  [tab:Map vh:Integer] [Map] [
+    def rw ((tab get "rows") get (tab get "focus"))
+    if ((rw get "kind") eq "leaf") [ (tab) ] [
+      if (rw get "open") [
+        if ((rw get "n") gt 0) [ move-by tab 1 vh ] [ (tab) ]
+      ] [ do-expand tab vh ]
+    ]
+  ]
+]
+
+# h / left: collapse an open container, else go to the parent.
+def move-out fn [
+  [tab:Map vh:Integer] [Map] [
+    def rows (tab get "rows")
+    def fx (tab get "focus")
+    def rw (rows get (fx))
+    if (rw get "open") [
+      with-rows tab (AvDoc.collapse (rows) (fx)) vh
+    ] [
+      move-to-maybe tab (if ((parent-index (rows) (fx)) eq (fx)) [ -1 ] [ parent-index (rows) (fx) ]) vh
+    ]
+  ]
+]
+
+# Scroll without moving focus (C-e / C-y); focus is dragged along only
+# when it would leave the window.
+def scroll-by fn [
+  [tab:Map delta:Integer vh:Integer] [Map] [
+    def n (size (tab get "rows"))
+    def sc (clampi ((tab get "scroll") add (delta)) 0 (MathUtil.max 0 ((n) sub (vh))))
+    def t2 ((tab) set scroll (sc))
+    def f (clampi (t2 get "focus") (sc) (MathUtil.max (sc) (((sc) add (vh)) sub 1)))
+    (t2) set focus (f)
+  ]
+]
+
+# z-commands: place the focused row at center / top / bottom.
+def reposition fn [
+  [tab:Map where:String vh:Integer] [Map] [
+    def n (size (tab get "rows"))
+    def fx (tab get "focus")
+    def want (case (where) [
+      "z" [ drop (fx) sub ((vh) div 2) ]
+      "t" [ drop (fx) ]
+      "b" [ drop ((fx) sub (vh)) add 1 ]
+      (tab get "scroll")
+    ])
+    (tab) set scroll (clampi (want) 0 (MathUtil.max 0 ((n) sub (vh))))
+  ]
+]
+
+
+# --- the key fold ----------------------------------------------------
+
+def nav-key fn [
+  [tab:Map ev:Map vh:Integer] [Map] [
+    def k0 ((ev get "key") otherwise "")
+    def kk (if (has-ctrl ev) [ `C-${k0}` ] [ (k0) ])
+    def rows (tab get "rows")
+    def fx (tab get "focus")
+    # pending z-command?
+    if ((tab get "pending") eq "z") [
+      def t2 ((tab) set pending "")
+      if (((kk) eq "z") or ((kk) eq "t") or ((kk) eq "b")) [
+        reposition t2 (kk) vh
+      ] [ (t2) ]
+    ] [
+      case (kk) [
+        "j"     [ drop move-by tab 1 vh ]
+        "down"  [ drop move-by tab 1 vh ]
+        "enter" [ drop move-by tab 1 vh ]
+        "k"     [ drop move-by tab -1 vh ]
+        "up"    [ drop move-by tab -1 vh ]
+        "l"     [ drop move-in tab vh ]
+        "right" [ drop move-in tab vh ]
+        "h"     [ drop move-out tab vh ]
+        "left"  [ drop move-out tab vh ]
+        "H"     [ drop move-to-maybe tab (if ((parent-index (rows) (fx)) eq (fx)) [ -1 ] [ parent-index (rows) (fx) ]) vh ]
+        "J"     [ drop move-to-maybe tab (next-sibling (rows) (fx)) vh ]
+        "K"     [ drop move-to-maybe tab (prev-sibling (rows) (fx)) vh ]
+        "w"     [ drop move-to-maybe tab (next-depth-change (rows) (fx)) vh ]
+        "b"     [ drop move-to-maybe tab (prev-depth-change (rows) (fx)) vh ]
+        "space" [ drop do-toggle tab vh ]
+        "c"     [ drop do-collapse tab vh ]
+        "e"     [ drop do-expand tab vh ]
+        "E"     [ drop deep-expand tab vh 400 ]
+        "g"     [ drop with-focus tab 0 vh ]
+        "G"     [ drop with-focus tab ((size (rows)) sub 1) vh ]
+        "0"     [ drop move-to-maybe tab (if ((parent-index (rows) (fx)) eq (fx)) [ -1 ] [ (parent-index (rows) (fx)) add 1 ]) vh ]
+        "^"     [ drop move-to-maybe tab (if ((parent-index (rows) (fx)) eq (fx)) [ -1 ] [ (parent-index (rows) (fx)) add 1 ]) vh ]
+        "$"     [ drop with-focus tab (last-sibling (rows) (fx)) vh ]
+        "C-f"   [ drop move-by tab (vh) vh ]
+        "pgdn"  [ drop move-by tab (vh) vh ]
+        "C-b"   [ drop move-by tab (0 sub (vh)) vh ]
+        "pgup"  [ drop move-by tab (0 sub (vh)) vh ]
+        "C-d"   [ drop move-by tab ((vh) div 2) vh ]
+        "C-u"   [ drop move-by tab (0 sub ((vh) div 2)) vh ]
+        "C-e"   [ drop scroll-by tab 1 vh ]
+        "C-y"   [ drop scroll-by tab -1 vh ]
+        "z"     [ drop (tab) set pending "z" ]
+        "."     [ drop (tab) set xoff ((tab get "xoff") add 8) ]
+        ","     [ drop (tab) set xoff (MathUtil.max 0 ((tab get "xoff") sub 8)) ]
+        (tab)
+      ]
+    ]
+  ]
+]
+
+
+export "AvNav" {
+  key: nav-key/r
+  follow: follow/r
+  index-of: index-of/r
+}
