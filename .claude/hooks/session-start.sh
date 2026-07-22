@@ -37,10 +37,10 @@ else
   src="$(mktemp -d)"
   if git clone --quiet --depth 1 https://github.com/aql-lang/aql "$src"; then
     ref="$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo main)"
-    # A fresh clone is a standalone module, not a workspace, so GOFLAGS=-mod=mod
-    # is the correct build flag here (it is only rejected inside the aql workspace).
+    # GOWORK=off: the aql repo ships a go.work, so disable workspace mode;
+    # GOFLAGS=-mod=mod then builds the standalone clone.
     ( cd "$src/cmd/go" \
-      && GOFLAGS=-mod=mod go build \
+      && GOWORK=off GOFLAGS=-mod=mod go build \
            -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${ref}" \
            -o "$AQL" ./aql ) \
       && log "Built $("$AQL" -version 2>/dev/null)." \

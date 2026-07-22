@@ -10,6 +10,9 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Nightly, so an upstream aql-main regression is caught even without a push.
+  schedule:
+    - cron: '0 6 * * *'
 
 jobs:
   test:
@@ -34,8 +37,9 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/bin"
           cd aql-src/cmd/go
-          # A standalone clone (not the aql workspace) — GOFLAGS=-mod=mod is correct here.
-          GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/aql" ./aql
+          # GOWORK=off: the aql repo ships a go.work, so disable workspace mode;
+          # GOFLAGS=-mod=mod then builds the standalone clone.
+          GOWORK=off GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/aql" ./aql
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/aql" -version
 
