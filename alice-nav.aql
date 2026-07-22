@@ -200,7 +200,11 @@ def do-toggle fn [
 
 # Expand every container in the focused subtree, bounded by fuel and a
 # hard row cap (interpreted aql: unbounded deep-expand of a huge file
-# would freeze the loop).
+# would freeze the loop). The cap is checked BEFORE each step against
+# the projected row count — a single container's direct-child count
+# (`n`) is how many rows one `AliceDoc.expand` adds — so one wide
+# container cannot overshoot the cap in a single expansion; an
+# expansion that would exceed it is rejected and deep-expand stops.
 def deep-expand fn [
   [tab:Map vh:Integer fuel:Integer] [Map] [
     def rows (tab get "rows")
@@ -212,8 +216,11 @@ def deep-expand fn [
         if (((rw get "kind") neq "leaf") and ((rw get "open") not)) [ (j) ] [ -1 ]
       ]
     ]] (range (fx) (e) 1) -1)
-    if (((cand) lt 0) or ((fuel) lte 0) or ((size (rows)) gt 5000)) [ (tab) ] [
-      deep-expand (with-rows tab (AliceDoc.expand (tab get "doc") (rows) (cand)) vh) vh ((fuel) sub 1)
+    if (((cand) lt 0) or ((fuel) lte 0)) [ (tab) ] [
+      def grow ((rows get (cand)) get "n")
+      if (((size (rows)) add (grow)) gt 5000) [ (tab) ] [
+        deep-expand (with-rows tab (AliceDoc.expand (tab get "doc") (rows) (cand)) vh) vh ((fuel) sub 1)
+      ]
     ]
   ]
 ]

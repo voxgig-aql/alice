@@ -1,13 +1,13 @@
 # alice viewer smoke test: every fixture format loads through AliceFmt and
-# renders rows through AliceDoc without an error. No assertions — like
-# test/bloom_smoke_test.aql, a clean end-to-end run is the pass.
+# renders rows through AliceDoc without an error. No assertions — a clean
+# end-to-end run is the pass.
 #
 # Run from the repo root:
 #   aql test/alice_smoke_test.aql
 
 
-import "./viewer/alice-fmt.aql" end
-import "./viewer/alice-doc.aql" end
+import "./alice-fmt.aql" end
+import "./alice-doc.aql" end
 
 
 print "--- alice viewer smoke: load + rows for every fixture ---"

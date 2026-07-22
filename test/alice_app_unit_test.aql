@@ -1,4 +1,4 @@
-# alice viewer: headless integration tests for the shell (viewer/alice.aql).
+# alice viewer: headless integration tests for the shell (alice-app.aql).
 #
 # Drives the REAL update loop through Alice.feed — the same fold Tui.run
 # applies to terminal events — with synthetic event maps, so command
@@ -6,7 +6,7 @@
 # exercised without a terminal. (aql has no AQL-reachable virtual
 # terminal backend; this is the next best surface — only rendering and
 # raw key decoding stay untested here, covered by the PTY smoke in
-# viewer/README.md.)
+# README.md.)
 #
 # Run from the repo root:
 #   aql test/alice_app_unit_test.aql
@@ -15,9 +15,9 @@
 import "aql:test" end
 import "aql:io" end
 import "aql:string-util" end
-import "./viewer/alice.aql" end
-import "./viewer/alice-tabs.aql" end
-import "./viewer/alice-view.aql" end
+import "./alice-app.aql" end
+import "./alice-tabs.aql" end
+import "./alice-view.aql" end
 
 
 def _tmp-path "test/fixtures/.tmp-alice-app-watch.json"
@@ -210,6 +210,22 @@ def _boot fn [
   1 (size (st3 get "tabs")) Assert.equal end
   "(welcome)" ((AliceTabs.active (st3)) get "path") Assert.equal end
 ] "q-closes-tab" Test.test end
+
+
+# --- r on the welcome tab is a no-op (no false gone/err) -------------
+#
+# The welcome tab has no file behind it, so a manual reload must not
+# try to load its synthetic "(welcome)" path and falsely mark it gone.
+
+[
+  def st (_boot)
+  def st2 (_key (st) "r")
+  def tb (AliceTabs.active (st2))
+  "(welcome)" (tb get "path") Assert.equal end
+  false (tb get "gone") Assert.equal end
+  true ((tb get "err") is None) Assert.equal end
+  true ((tb get "rows") deq ((AliceTabs.active (st)) get "rows")) Assert.equal end
+] "welcome-reload-noop" Test.test end
 
 
 # --- help overlay ----------------------------------------------------

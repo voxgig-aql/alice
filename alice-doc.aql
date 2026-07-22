@@ -288,16 +288,24 @@ def value-str fn [
 
 # --- search ----------------------------------------------------------
 
-def search-node fn [
-  [doc:Any r:Map needle:String copts:Map] [List] [
-    def hitkey (StringUtil.contains needle (key-str (r)) (copts))
-    def hitval (if ((r get "kind") eq "leaf") [
-      StringUtil.contains needle (value-str doc (r)) (copts)
-    ] [ false ])
-    def below (if ((r get "kind") eq "leaf") [ [] ] [
-      flatten (each [ var [[c] (search-node doc (c) needle (copts)) ] ] (kids doc (r)))
-    ])
-    if ((hitkey) or (hitval)) [ unshift (r get "path") (below) ] [ (below) ]
+# DFS that accumulates matching paths in document order, threading the
+# result list so traversal STOPS once the 500-hit cap is reached — the
+# cap bounds the work, not just the output, so a huge repetitive
+# document cannot exhaust the viewer building a list it will only trim.
+def search-into fn [
+  [doc:Any r:Map needle:String copts:Map acc:List] [List] [
+    if ((size (acc)) gte 500) [ (acc) ] [
+      def hitkey (StringUtil.contains needle (key-str (r)) (copts))
+      def hitval (if ((r get "kind") eq "leaf") [
+        StringUtil.contains needle (value-str doc (r)) (copts)
+      ] [ false ])
+      def acc2 (if ((hitkey) or (hitval)) [ push (r get "path") acc ] [ (acc) ])
+      if ((r get "kind") eq "leaf") [ (acc2) ] [
+        fold [ var [[c a]
+          if ((size (a)) gte 500) [ (a) ] [ search-into doc (c) needle (copts) (a) ]
+        ]] (kids doc (r)) (acc2)
+      ]
+    ]
   ]
 ]
 
@@ -307,8 +315,7 @@ def search-node fn [
 def search fn [
   [doc:Any needle:String] [List] [
     def copts (if ((StringUtil.lower needle) eq (needle)) [ {cs: "insensitive"} ] [ {} ])
-    def hits (search-node doc (root-row doc) needle (copts))
-    if ((size (hits)) gt 500) [ take 500 hits ] [ (hits) ]
+    search-into doc (root-row doc) needle (copts) []
   ]
 ]
 

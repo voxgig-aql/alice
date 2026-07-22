@@ -1,10 +1,10 @@
 #!/bin/bash
 # SessionStart hook: ensure the `aql` interpreter is available so the agent can
-# run this library's scripts and tests. AQL has no tagged release, so we build
-# it from source at the commit this library is pinned to (the same ref CI uses).
+# run alice and its tests. alice tracks aql MAIN (the aql:tui stack it needs
+# postdates any tagged build), so this builds aql from the latest main.
 #
-# Synchronous and idempotent: skips the build if the binary already exists, and
-# caches into the container so later sessions are instant. Progress goes to
+# Synchronous and idempotent: skips the build if a binary already exists, and
+# caches it into the container so later sessions are instant. Progress goes to
 # stderr; stdout is left clean (SessionStart stdout is injected as context).
 set -uo pipefail
 
@@ -16,10 +16,6 @@ fi
 
 log() { echo "[session-start] $*" >&2; }
 
-# Keep this in lockstep with the workflow's AQL_REF (the consistency CI job
-# fails if they drift). The canonical workflow lives in
-# .github/workflows/test.yml. Full 40-char commit so the build is reproducible.
-AQL_REF=7b1a4fbdd4cc0b93966a660d642416e714c02b98
 BIN_DIR="$HOME/.local/bin"
 AQL="$BIN_DIR/aql"
 
@@ -33,33 +29,35 @@ if command -v aql >/dev/null 2>&1 || [ -x "$AQL" ]; then
   log "aql already present ($("$AQL" -version 2>/dev/null || aql -version 2>/dev/null)); skipping build."
 else
   if ! command -v go >/dev/null 2>&1; then
-    log "WARNING: Go toolchain not found; cannot build aql. Install Go, or build aql manually (see docs/how-to.md)."
+    log "WARNING: Go toolchain not found; cannot build aql. Install Go, then build aql from an aql-lang/aql checkout: cd cmd/go && go build -o \"$AQL\" ./aql"
     exit 0
   fi
-  log "Building aql @ $AQL_REF from source (one-time; cached afterwards)…"
+  log "Building aql from aql-lang/aql main (one-time; cached afterwards)…"
   mkdir -p "$BIN_DIR"
   src="$(mktemp -d)"
-  if git clone --quiet https://github.com/aql-lang/aql "$src" \
-     && git -C "$src" checkout --quiet "$AQL_REF"; then
+  if git clone --quiet --depth 1 https://github.com/aql-lang/aql "$src"; then
+    ref="$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo main)"
+    # A fresh clone is a standalone module, not a workspace, so GOFLAGS=-mod=mod
+    # is the correct build flag here (it is only rejected inside the aql workspace).
     ( cd "$src/cmd/go" \
       && GOFLAGS=-mod=mod go build \
-           -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${AQL_REF}" \
+           -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${ref}" \
            -o "$AQL" ./aql ) \
       && log "Built $("$AQL" -version 2>/dev/null)." \
-      || log "WARNING: aql build failed; see docs/how-to.md to build manually."
+      || log "WARNING: aql build failed; build manually from an aql checkout (cd cmd/go && go build -o \"$AQL\" ./aql)."
   else
-    log "WARNING: could not fetch aql source (network?); see docs/how-to.md."
+    log "WARNING: could not fetch aql source (network?); build manually from an aql checkout."
   fi
   rm -rf "$src"
 fi
 
-# Fast confidence check: run the smoke test if aql is usable. Never fail the
+# Fast confidence check: run the smoke suite if aql is usable. Never fail the
 # session on a check error.
-if [ -x "$AQL" ] && [ -f "$CLAUDE_PROJECT_DIR/test/bloom_smoke_test.aql" ]; then
-  if ( cd "$CLAUDE_PROJECT_DIR" && "$AQL" test/bloom_smoke_test.aql >/dev/null 2>&1 ); then
-    log "Smoke check passed (aql test/bloom_smoke_test.aql)."
+if [ -x "$AQL" ] && [ -f "$CLAUDE_PROJECT_DIR/test/alice_smoke_test.aql" ]; then
+  if ( cd "$CLAUDE_PROJECT_DIR" && "$AQL" test/alice_smoke_test.aql >/dev/null 2>&1 ); then
+    log "Smoke check passed (aql test/alice_smoke_test.aql)."
   else
-    log "NOTE: smoke check did not pass; toolchain may be incomplete."
+    log "NOTE: smoke check did not pass; the aql toolchain may be incomplete or main may have regressed."
   fi
 fi
 

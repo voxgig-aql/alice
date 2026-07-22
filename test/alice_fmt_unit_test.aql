@@ -1,11 +1,11 @@
-# alice viewer: unit tests for viewer/alice-fmt.aql (format detection + load).
+# alice viewer: unit tests for alice-fmt.aql (format detection + load).
 #
 # Run from the repo root (fixture paths are CWD-relative):
 #   aql test/alice_fmt_unit_test.aql
 
 
 import "aql:test" end
-import "./viewer/alice-fmt.aql" end
+import "./alice-fmt.aql" end
 
 
 # --- kind-of: extension mapping ------------------------------------

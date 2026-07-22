@@ -3,8 +3,8 @@
 **Status:** Draft (an upstream implementation of the argv half is being
 attempted on `aql-lang/aql` branch `claude/aql-file-viewer-tui-4mf69t`).
 **Target:** `aql-lang/aql` CLI (`cmd/go`) + `aql:io` module.
-**Provenance:** surfaced while building this repo's `viewer/` (the `alice`
-TUI file viewer); recorded as **§9** in the 2026-07-21 round of
+**Provenance:** surfaced while building the `alice`
+TUI file viewer; recorded as **§5** of of
 [`dx-report.md`](../dx-report.md).
 **Build referenced:** `aql @ c1d2a1a` (main, 2026-07-20).
 
@@ -24,7 +24,7 @@ receive a file name, a flag, or `$HOME` from its caller. The `alice`
 viewer ships with this launch story instead:
 
 ```bash
-aql -e 'import "./viewer/alice.aql"  Alice.run {files: ["notes.json"]}'
+aql -e 'import "./alice-app.aql"  Alice.run {files: ["notes.json"]}'
 ```
 
 which works but is nobody's idea of a CLI. (The `args` word is

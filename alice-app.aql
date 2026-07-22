@@ -4,15 +4,15 @@
 # (alice-view) renders it, and background work (file watchers) arrives as
 # ordinary mailbox messages sent to the registered "tui" process.
 #
-#   import "./viewer/alice.aql"
+#   import "./alice-app.aql"
 #   Alice.run {}                                     # welcome tab, :open files
 #   Alice.run {files: ["a.json", "b.csv"]}           # open files (watch ON)
 #   Alice.run {files: ["big.json"], watch: false}    # without auto-reload
 #   Alice.serve {tcp: 9700, token: "s3cret"} …       # remote viewing (aql attach)
 #
-# aql has no script argv (see the repo dx-report), so passing files
-# from a shell means `aql -e`:
-#   aql -e 'import "./viewer/alice.aql"  Alice.run {files: ["test/fixtures/sample.json"]}'
+# Files can be passed from a shell via `aql alice.aql <files>` (IO.args)
+# or, on a build without it, `aql -e`:
+#   aql -e 'import "./alice-app.aql"  Alice.run {files: ["test/fixtures/sample.json"]}'
 #
 # App state:
 #   { tabs, active, next          the tab set (alice-tabs)
@@ -136,15 +136,20 @@ def stop-watch fn [
 ]
 
 # Reload one tab, marking it gone when the file vanished, and restamp.
+# The welcome tab has no file behind it (path "(welcome)"), so a manual
+# `r` there is a no-op rather than a failed load that falsely marks it
+# errored/gone — the same sentinel `start-watch` already guards.
 def reload-watched fn [
   [tab:Map vh:Integer] [Map] [
-    def res (AliceFmt.load (tab get "path") ((tab get "opts") otherwise {}))
-    def t2 (AliceTabs.reanchor (tab) (res) (vh))
-    def t3 (if (res get "ok") [ (t2) ] [
-      def st (do [ IO.stat (make Pathon (tab get "path")) ])
-      (t2) set gone (((st) is None) or ((st) is Error))
-    ])
-    (t3) set stamp (stamp-of (tab get "path"))
+    if ((tab get "path") eq "(welcome)") [ (tab) ] [
+      def res (AliceFmt.load (tab get "path") ((tab get "opts") otherwise {}))
+      def t2 (AliceTabs.reanchor (tab) (res) (vh))
+      def t3 (if (res get "ok") [ (t2) ] [
+        def st (do [ IO.stat (make Pathon (tab get "path")) ])
+        (t2) set gone (((st) is None) or ((st) is Error))
+      ])
+      (t3) set stamp (stamp-of (tab get "path"))
+    ]
   ]
 ]
 

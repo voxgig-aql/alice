@@ -3,14 +3,14 @@
 **Status:** Draft — this is primarily a bug report with repros; the
 "proposal" is that these become pinned negative tests upstream.
 **Target:** `aql-lang/aql` engine (dispatch, scope cleanup).
-**Provenance:** surfaced while building this repo's `viewer/` (the `alice`
-TUI file viewer); recorded as **§5, §7, §8** in the 2026-07-21 round of
+**Provenance:** surfaced while building the `alice`
+TUI file viewer; recorded as **§1, §3, §4** of of
 [`dx-report.md`](../dx-report.md).
 **Build referenced:** `aql @ c1d2a1a` (main, 2026-07-20).
 
 Three related failures, all *silent* (no error at the faulty site, or
 no error at all), all sensitive to **where a call chain starts** rather
-than what the code says. Each has a shipped workaround in `viewer/`,
+than what the code says. Each has a shipped workaround in the modules,
 but they are the kind of bug that unit tests miss and composed programs
 hit: the same shapes pass when called directly and fail three frames
 deep.
@@ -32,7 +32,7 @@ def err ((AliceTabs.active (s3)) …)      # [aql/undefined_word]: s3
 
 Calling the module export directly binds fine; converting the recursive
 helpers to folds fixed identical failures in `AliceTabs.reanchor`/`reveal`
-(`viewer/alice-tabs.aql`, history before commit 7c6f739 has the failing
+(`alice-tabs.aql`, history before commit 7c6f739 has the failing
 shapes). Suspect: a frame-cleanup snapshot that restores def-depth
 past the just-installed binding when the callee's own frame machinery
 (delegation or recursion) unwinds — same family as the historical
@@ -54,7 +54,7 @@ print (each [ var [[k] (hop ((doc) get (k))) ] ] (keys (doc)))  # ["leaf"] ✗
 ```
 
 Silent wrong result, no error. Workaround: native `is`-chains for type
-dispatch in shared plumbing (`viewer/alice-doc.aql`).
+dispatch in shared plumbing (`alice-doc.aql`).
 
 ## 3. Returned map literals evaluate after param teardown (🟡)
 

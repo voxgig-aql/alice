@@ -3,17 +3,17 @@
 # Launch from the repo root:
 #   aql alice.aql                # welcome tab; open files with :open
 #
-# On an aql with the proposed IO.args word (proposals/
-# script-argv-and-env.md), files can be passed straight from the shell:
+# On an aql with the IO.args word (proposals/script-argv-and-env.md),
+# files can be passed straight from the shell:
 #   aql alice.aql notes.json data.csv
 # On builds without it, IO.args is absent and this falls back to the
 # welcome tab (open files with :open, or use the -e form):
-#   aql -e 'import "./viewer/alice.aql"  Alice.run {files: ["test/fixtures/sample.json"]}'
+#   aql -e 'import "./alice-app.aql"  Alice.run {files: ["test/fixtures/sample.json"]}'
 #
-# Full keymap: press ? inside, or see viewer/README.md.
+# Full keymap: press ? inside, or see README.md.
 
 import "aql:io"
-import "./viewer/alice.aql"
+import "./alice-app.aql"
 
 def _cli-files (do [ IO.args ] error [ drop [] ])
 

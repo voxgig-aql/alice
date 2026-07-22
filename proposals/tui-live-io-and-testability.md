@@ -2,8 +2,8 @@
 
 **Status:** Draft.
 **Target:** `aql-lang/aql` — `aql:tui` runtime + `aql:io` watch.
-**Provenance:** surfaced while building this repo's `viewer/` (the `alice`
-TUI file viewer); recorded as **§6** and "worth keeping" notes in the
+**Provenance:** surfaced while building the `alice`
+TUI file viewer; recorded as **§2** and "worth keeping" notes in the
 2026-07-21 round of [`dx-report.md`](../dx-report.md).
 **Build referenced:** `aql @ c1d2a1a` (main, 2026-07-20).
 
@@ -12,7 +12,7 @@ TUI file viewer); recorded as **§6** and "worth keeping" notes in the
 A watch registered from a `Tui.run` update never delivers: the callback
 body simply never runs while the TUI driver owns the runtime, though
 the identical registration in a headless script fires within
-milliseconds (repro pair in dx-report §6). Reacting to filesystem
+milliseconds (repro pair in dx-report §2). Reacting to filesystem
 changes while parked in the event loop is the entire point of watching
 in a TUI, so today `aql:tui` and `IO.watch` cannot be combined; the
 `av` viewer ships a spawned metronome process + mtime/size polling

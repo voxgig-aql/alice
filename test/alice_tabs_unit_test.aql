@@ -1,4 +1,4 @@
-# alice viewer: unit tests for viewer/alice-tabs.aql (tab set + reload
+# alice viewer: unit tests for alice-tabs.aql (tab set + reload
 # re-anchor).
 #
 # Run from the repo root:
@@ -6,9 +6,9 @@
 
 
 import "aql:test" end
-import "./viewer/alice-doc.aql" end
-import "./viewer/alice-nav.aql" end
-import "./viewer/alice-tabs.aql" end
+import "./alice-doc.aql" end
+import "./alice-nav.aql" end
+import "./alice-tabs.aql" end
 
 
 def _vh 5

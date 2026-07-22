@@ -1,13 +1,13 @@
-# alice viewer: property tests for viewer/alice-doc.aql, in the imperative
-# `Test.check-prop` form (see test/bloom_prop_test.aql for the form's
-# conventions: GEN-BODY leaves one value, PROP-BODY returns a Boolean).
+# alice viewer: property tests for alice-doc.aql, in the imperative
+# `Test.check-prop` form (GEN-BODY leaves one value, PROP-BODY returns a
+# Boolean).
 #
 # Run from the repo root:
 #   aql test/alice_doc_prop_test.aql
 
 
 import "aql:test" end
-import "./viewer/alice-doc.aql" end
+import "./alice-doc.aql" end
 
 
 # A fixture with maps, lists, nesting, and scalars in all positions.

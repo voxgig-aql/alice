@@ -1,11 +1,11 @@
-# alice viewer: unit tests for viewer/alice-doc.aql (document → row model).
+# alice viewer: unit tests for alice-doc.aql (document → row model).
 #
 # Run from the repo root:
 #   aql test/alice_doc_unit_test.aql
 
 
 import "aql:test" end
-import "./viewer/alice-doc.aql" end
+import "./alice-doc.aql" end
 
 
 # Fixture documents, at top level (aql check treats test bodies as
@@ -14,6 +14,8 @@ import "./viewer/alice-doc.aql" end
 def _doc {name: "ada", tags: ["x", "y"], meta: {age: 36, ok: true}}
 def _deep {a: {b: {c: [1, {d: 2}]}}, z: 5}
 def _lines ["first", "second", "", "fourth"]
+# 600 leaves that all match "match" — more than the 500-hit search cap.
+def _many (iota 600 each [ var [[i] "match-me" ] ])
 
 
 # --- top: root plus one expanded level ------------------------------
@@ -189,6 +191,12 @@ def _lines ["first", "second", "", "fourth"]
   1 (size (hits)) Assert.equal end
   true ((hits get 0) deq ["a", "b", "c", 1, "d"]) Assert.equal end
 ] "search-deep-key" Test.test end
+
+# The cap bounds the traversal, not just the output: 600 matching leaves
+# yield exactly 500 hits (search stops collecting at the cap).
+[
+  500 (size (AliceDoc.search (_many) "match")) Assert.equal end
+] "search-caps-at-500" Test.test end
 
 
 # --- expansion sets + rebuild ---------------------------------------

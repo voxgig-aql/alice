@@ -1,12 +1,12 @@
-# alice viewer: unit tests for viewer/alice-nav.aql (the jless keymap fold).
+# alice viewer: unit tests for alice-nav.aql (the jless keymap fold).
 #
 # Run from the repo root:
 #   aql test/alice_nav_unit_test.aql
 
 
 import "aql:test" end
-import "./viewer/alice-doc.aql" end
-import "./viewer/alice-nav.aql" end
+import "./alice-doc.aql" end
+import "./alice-nav.aql" end
 
 
 def _doc {a: {b: {c: [1, 2]}, d: true}, e: "s", f: [10, 20, 30]}
@@ -128,6 +128,18 @@ def _vh 5
   def t1 (AliceNav.key (_mk) {key: "E"} (_vh))
   12 (size (t1 get "rows")) Assert.equal end
 ] "deep-expand-all" Test.test end
+
+# A single container wider than the 5000-row cap must not be expanded in
+# one step: E rejects the expansion and the rows stay put.
+def _wide {items: (iota 6000)}
+[
+  def rows (AliceDoc.top (_wide))
+  def st {doc: (_wide), rows: (rows), focus: 0, scroll: 0, xoff: 0, pending: ""}
+  2 (size (st get "rows")) Assert.equal end
+  def t1 (AliceNav.key (st) {key: "E"} (_vh))
+  2 (size (t1 get "rows")) Assert.equal end
+  false (((t1 get "rows") get 1) get "open") Assert.equal end
+] "deep-expand-respects-row-cap" Test.test end
 
 
 # --- paging and scrolling -------------------------------------------
