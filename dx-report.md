@@ -40,13 +40,49 @@ def err ((AliceTabs.active (s3)) …)     # [aql/undefined_word]: s3
 Replacing the alias with the direct module call (`def s3
 (AliceTabs.put-active (s2) (tabw))`) binds correctly; converting recursive
 helpers (`add-ancestors`, `surviving-anchor`) to `fold`s fixed the same
-failure in `AliceTabs.reanchor`/`reveal`. The same shapes work when called
-from a test body or the top level — only the deep chain misbinds, so a
-green unit suite does not protect the composed program. Every module now
-avoids local alias fns and recursion in state-machinery as a matter of
-policy. Not reduced to a standalone repro (context-sensitive); the pre-fix
-shapes are in this repo's git history (`alice-app.aql`/`alice-tabs.aql`
-before 7c6f739).
+failure in `AliceTabs.reanchor`/`reveal`. Every module now avoids local
+alias fns and recursion in state-machinery as a matter of policy.
+
+**Root-caused & fixed** (on the tracked aql branch): reduced to a
+standalone repro and isolated to **tail-call elimination**, so it is
+**interpreter-only** — the default runtime compiles and the bytecode path
+was always correct, which is why the same shape returns the right value
+under `--force-compile` and only `--no-compile` errored. That masking is
+also why it never showed up as a standalone repro before: `aql script.aql`
+compiles, so the failure only surfaced in the composed program along a
+path the compiler happened to refuse (falling back to the interpreter).
+Minimal repro (`--no-compile`):
+
+```aql
+def f fn [[n:Integer] [Integer] [ if ((n) lte 0) [ 0 ] [ f ((n) sub 1) ] ]]
+def x (f 3)          # binds nothing under the interpreter
+def y ((x) add 1)    # [aql/undefined_word]: x
+```
+
+The trigger is precise: a fn body that ends in a **tail call** whose
+**result is consumed as a forward paren-group argument** (`def x (f n)`,
+`g (f n)`, `(f n) add …`). A forward paren group is evaluated eagerly by
+the engine's `evalParenGroupAt`, which walks the group's tokens with a
+local paren-depth counter to find its matching `)`. The tail call inside
+the group fires TCO, which rewrites the enclosing frame region on the tape
+(full-frame replacement / shell elision) out from under that counter — the
+group's `)` is deleted or index-shifted before the loop decrements on it,
+so the counter never reaches zero, the group never collapses, and the
+bound result silently vanishes. Neither recursion nor an alias is required
+in itself; both merely *produce* the shape — an alias `def s3
+(Ns.put-active …)` is a one-call tail body bound through a forward paren.
+The fix declines TCO while a paren group is being evaluated (the tail call
+nests, which the depth counter tracks correctly) — a strict improvement,
+since a declined tail call only nests and never changes a result. (One
+narrow, interpreter-only caveat: a *very* deep — >~70k — tail recursion
+consumed through a forward paren now nests rather than iterating, so
+`--no-compile` can raise `tape_exhausted` where the default compiled path
+stays O(1). The shape was fully broken before, so this is still strictly
+better; the compiler covers it on every path but the diagnostic
+interpreter.) The fold/direct-call workarounds above are retained because
+this viewer also runs on stock aql main, where the fix has yet to merge —
+they dispatch correctly either way. (Pre-fix shapes are in this repo's git history,
+`alice-app.aql`/`alice-tabs.aql` before 7c6f739.)
 
 ### 2. 🔴 `IO.watch` callbacks are never delivered while `Tui.run` runs
 
@@ -93,6 +129,25 @@ print (each [ var [[k] (hop ((doc) get (k))) ] ] (keys (doc)))  # ["leaf"] ✗
 single-sig fns with native `is`-chains (`alice-doc.aql`
 `node-kind`/`get-seg`/`has-seg`); multi-sig overloads only where the
 dispatch happens directly on an expression at the call site.
+
+**Fixed** (on the aql branch this viewer tracks): the divergence was
+**bytecode-only** — the interpreter re-dispatched on the true value
+(`--no-compile` yields `["map"]`), but the default runtime compiles, and
+the compiler baked the wrong arm (`["leaf"]`). Root cause: the value
+reaches `nk` through `hop`'s `Any` param, whose generalised arg is a
+*strict* `Any` carrier (`core_helpers.go`); a strict `Any` matched only
+`nk`'s `Any` overload, so `matchSignature` committed that arm statically
+instead of arming the runtime poly re-match. The each/fold body is only
+what keeps the intermediate value gradual (a loop-variable key defeats the
+constant-fold that would otherwise pin it to a concrete `Map`). The fix
+treats a strict `Any` carrier as reaching every same-arity arm, so the
+dispatch arms the existing user-poly re-match and the VM re-runs
+`MatchSignature` on the real value — exactly like the interpreter, or it
+refuses to the interpreter; never a wrong static commit. Pinned by
+`lang/go/bytecode_userpoly_anywrapper_test.go` (a Map selects the Map arm,
+a leaf the Any arm, on both surfaces). The `is`-chain workaround above is
+retained because this viewer also runs on stock aql main, where the fix
+has yet to merge — it dispatches correctly either way.
 
 ### 4. 🟡 A map literal returned from an fn body evaluates after teardown
 
@@ -223,9 +278,9 @@ where the fix has yet to merge. Pinned upstream by
 
 | # | Severity | Issue | Status |
 |---|----------|-------|--------|
-| 1 | 🔴 | silent `def`-binding failure in deep call chains (alias fns, recursion) | open; policy workaround |
+| 1 | 🔴 | silent `def`-binding failure in deep call chains (alias fns, recursion) | **root-caused & fixed** on the tracked aql branch (TCO × forward-paren-group, interpreter-only); fold/direct workaround retained for stock main |
 | 2 | 🔴 | `IO.watch` callbacks starved under `Tui.run` | open; metronome+poll workaround |
-| 3 | 🔴 | multi-sig dispatch degrades through Any params in each/cross-module chains | open; is-chain workaround |
+| 3 | 🔴 | multi-sig dispatch degrades through Any params in each/cross-module chains | **fixed** on the tracked aql branch (bytecode strict-Any re-dispatch); is-chain workaround retained for stock main |
 | 4 | 🟡 | returned map literal evaluates after param teardown | open; def-then-return |
 | 5 | 🟡 | no script argv / env access | open; RFC filed, launcher feature-detects |
 | 6 | 🟡 | checker false-error shapes gate `aql X` | open; typed-helper idioms |
