@@ -1,4 +1,4 @@
-# alice-doc: the document → row model for the alice viewer.
+# aless-doc: the document → row model for the aless viewer.
 #
 # A loaded document (any parsed value: map, list, scalar, or a list of
 # text lines) is presented as a flat list of ROWS — one per visible
@@ -16,25 +16,25 @@
 # module body per import — distinct class identities per importer would
 # break cross-module row exchange.
 #
-# Public surface (the AliceDoc namespace exported at the bottom):
+# Public surface (the AlessDoc namespace exported at the bottom):
 #
-#   AliceDoc.top doc                   → List   initial rows (root + first level)
-#   AliceDoc.kids doc row              → List   child rows of a container row
-#   AliceDoc.expand doc rows ix        → List   rows with row ix expanded
-#   AliceDoc.collapse rows ix          → List   rows with row ix collapsed
-#   AliceDoc.subtree-end rows ix       → Integer  first index past ix's subtree
-#   AliceDoc.rebuild doc expanded      → List   full rows for an expansion set
-#   AliceDoc.expanded-of rows          → Map    expansion set of a row list
-#   AliceDoc.value-at doc path         → Any    value at a path (none if absent)
-#   AliceDoc.has-path doc path         → Boolean  path resolvable in doc?
-#   AliceDoc.parent path               → List   path minus its last segment
-#   AliceDoc.path-key path             → String canonical key for a path
-#   AliceDoc.path-str path             → String jless-style ".a.b[2]" display
-#   AliceDoc.key-str row               → String display form of a row's key
-#   AliceDoc.value-str doc row         → String display form of a row's value
-#   AliceDoc.search doc needle         → List   paths of matching nodes (≤500)
+#   AlessDoc.top doc                   → List   initial rows (root + first level)
+#   AlessDoc.kids doc row              → List   child rows of a container row
+#   AlessDoc.expand doc rows ix        → List   rows with row ix expanded
+#   AlessDoc.collapse rows ix          → List   rows with row ix collapsed
+#   AlessDoc.subtree-end rows ix       → Integer  first index past ix's subtree
+#   AlessDoc.rebuild doc expanded      → List   full rows for an expansion set
+#   AlessDoc.expanded-of rows          → Map    expansion set of a row list
+#   AlessDoc.value-at doc path         → Any    value at a path (none if absent)
+#   AlessDoc.has-path doc path         → Boolean  path resolvable in doc?
+#   AlessDoc.parent path               → List   path minus its last segment
+#   AlessDoc.path-key path             → String canonical key for a path
+#   AlessDoc.path-str path             → String jless-style ".a.b[2]" display
+#   AlessDoc.key-str row               → String display form of a row's key
+#   AlessDoc.value-str doc row         → String display form of a row's value
+#   AlessDoc.search doc needle         → List   paths of matching nodes (≤500)
 #
-# The expansion set (`expanded`) is a Map keyed by AliceDoc.path-key with
+# The expansion set (`expanded`) is a Map keyed by AlessDoc.path-key with
 # `true` values. Incremental expand/collapse splice rows in place so
 # per-keystroke work stays proportional to the touched subtree, never
 # the whole document; `rebuild` (full walk) is reserved for reload and
@@ -320,7 +320,7 @@ def search fn [
 ]
 
 
-export "AliceDoc" {
+export "AlessDoc" {
   top: top/r
   kids: kids/r
   expand: expand/r

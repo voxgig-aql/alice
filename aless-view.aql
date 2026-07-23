@@ -1,11 +1,11 @@
-# alice-view: pure widget-tree builders for the alice viewer. State in,
+# aless-view: pure widget-tree builders for the aless viewer. State in,
 # widget maps out — no terminal words, so every builder is testable by
 # inspecting the returned maps.
 #
-# Public surface (the AliceView namespace exported at the bottom):
+# Public surface (the AlessView namespace exported at the bottom):
 #
-#   AliceView.render state       → Map    the full screen tree for Tui.run
-#   AliceView.row-line doc row xoff width → String   one rendered tree line
+#   AlessView.render state       → Map    the full screen tree for Tui.run
+#   AlessView.row-line doc row xoff width → String   one rendered tree line
 #
 # Screen layout (Tui.rows):
 #   tab strip   (1 row)   " 1:name* "-style cells, active reversed
@@ -17,7 +17,7 @@
 import "aql:tui"
 import "aql:math-util"
 import "aql:string-util"
-import "./alice-doc.aql"
+import "./aless-doc.aql"
 
 
 # --- small helpers ---------------------------------------------------
@@ -57,9 +57,9 @@ def row-line fn [
     def mk (if ((rw get "kind") eq "leaf") [ "  " ] [
       if (rw get "open") [ "▾ " ] [ "▸ " ]
     ])
-    def ks (AliceDoc.key-str (rw))
+    def ks (AlessDoc.key-str (rw))
     def kp (if ((ks) eq "") [ "" ] [ `${ks}: ` ])
-    def vp (AliceDoc.value-str doc (rw))
+    def vp (AlessDoc.value-str doc (rw))
     clip `${ind}${mk}${kp}${vp}` (xoff) (width)
   ]
 ]
@@ -116,7 +116,7 @@ def status-bar fn [
   [state:Map tab:Map] [Map] [
     def rows (tab get "rows")
     def fx (tab get "focus")
-    def pth (if ((size (rows)) gt 0) [ AliceDoc.path-str ((rows get (fx)) get "path") ] [ "" ])
+    def pth (if ((size (rows)) gt 0) [ AlessDoc.path-str ((rows get (fx)) get "path") ] [ "" ])
     def er ((tab get "err") otherwise none)
     def estr (if ((er) is None) [ "" ] [ ` · error: ${er}` ])
     def gstr (if ((tab get "gone") otherwise false) [ " · file gone" ] [ "" ])
@@ -142,7 +142,7 @@ def bottom-bar fn [
 def help-pane fn [
   [] [Map] [
     def lines [
-      "alice — an aql file viewer (jless-style)"
+      "aless — an aql file viewer (jless-style)"
       ""
       "  j k / arrows   move focus        l / right   expand · first child"
       "  h / left       collapse · parent H           parent (no collapse)"
@@ -199,7 +199,7 @@ def render fn [
 ]
 
 
-export "AliceView" {
+export "AlessView" {
   render: render/r
   row-line: row-line/r
 }

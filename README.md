@@ -1,4 +1,4 @@
-# alice — an aql file viewer
+# aless — an aql file viewer
 
 A full-screen terminal viewer for every file format [aql](https://github.com/aql-lang/aql)
 can parse, written **in AQL** on the `aql:tui` stack, modeled on
@@ -7,11 +7,11 @@ multiple open files and a **watch** mode that reloads changed files
 while keeping your place.
 
 ```bash
-aql alice.aql                 # welcome tab; open files with :open
-aql alice.aql notes.json      # open a file straight away (needs IO.args — see below)
+aql aless.aql                 # welcome tab; open files with :open
+aql aless.aql notes.json      # open a file straight away (needs IO.args — see below)
 ```
 
-Verified against `aql-lang/aql` **main @ `c1d2a1a`** (2026-07-20). alice
+Verified against `aql-lang/aql` **main @ `c1d2a1a`** (2026-07-20). aless
 tracks aql **main**, unpinned — the `aql:tui` stack it rides on landed
 upstream on 2026-07-17, and the app follows it forward. A "last
 verified" commit is recorded here instead of a pin; CI builds aql from
@@ -22,7 +22,7 @@ main on every run.
 From the repo root (imports are working-directory-relative):
 
 ```bash
-aql alice.aql                 # welcome tab; open files with :open
+aql aless.aql                 # welcome tab; open files with :open
 ```
 
 On an aql carrying the `IO.args` word (see
@@ -30,7 +30,7 @@ On an aql carrying the `IO.args` word (see
 viewer was developed against), files pass straight from the shell:
 
 ```bash
-aql alice.aql notes.json data.csv
+aql aless.aql notes.json data.csv
 ```
 
 On builds without it, aql scripts cannot read command-line arguments
@@ -38,12 +38,12 @@ On builds without it, aql scripts cannot read command-line arguments
 from there), or use the `-e` form:
 
 ```bash
-aql -e 'import "./alice-app.aql"  Alice.run {files: ["test/fixtures/sample.json"]}'
-aql -e 'import "./alice-app.aql"  Alice.run {files: ["a.json", "b.csv"], watch: false}'
+aql -e 'import "./aless-app.aql"  Aless.run {files: ["test/fixtures/sample.json"]}'
+aql -e 'import "./aless-app.aql"  Aless.run {files: ["a.json", "b.csv"], watch: false}'
 ```
 
 Remote viewing works for free, because the same app map serves both
-runtimes: `Alice.serve {tcp: 9700, token: "s3cret"} …` then `aql attach`.
+runtimes: `Aless.serve {tcp: 9700, token: "s3cret"} …` then `aql attach`.
 
 ## Formats
 
@@ -89,7 +89,7 @@ Commands (`:`): `:open <path> [kind]` · `:close` · `:tab <n>` ·
 
 ## Watch
 
-Watching is ON by default for every opened tab (`Alice.run {watch:
+Watching is ON by default for every opened tab (`Aless.run {watch:
 false}`, `:watch off`, or `W` to opt out; the status bar shows
 `watching`). A spawned metronome process ticks the app once a second;
 each watched tab's mtime+size stamp is compared and, on change, the
@@ -126,24 +126,24 @@ dx-report §2.
 ## Architecture
 
 ```
-alice.aql        entry launcher: reads IO.args, runs Alice.run
-alice-app.aql    shell: Tui.run app map, mode routing, watch metronome
-alice-view.aql   pure widget builders (tab strip, tree pane, bars, help)
-alice-nav.aql    pure jless keymap fold over a tab's view state
-alice-tabs.aql   pure tab set + reload re-anchor + reveal
-alice-doc.aql    pure document → row model (splices, search, display)
-alice-fmt.aql    format detection + IO.read loading
+aless.aql        entry launcher: reads IO.args, runs Aless.run
+aless-app.aql    shell: Tui.run app map, mode routing, watch metronome
+aless-view.aql   pure widget builders (tab strip, tree pane, bars, help)
+aless-nav.aql    pure jless keymap fold over a tab's view state
+aless-tabs.aql   pure tab set + reload re-anchor + reveal
+aless-doc.aql    pure document → row model (splices, search, display)
+aless-fmt.aql    format detection + IO.read loading
 ```
 
-Everything except `alice-app.aql` is terminal-free and unit-tested
-(`test/alice_*`). The shell itself is exercised headlessly through
-`Alice.feed`, which folds synthetic events through the real update loop —
+Everything except `aless-app.aql` is terminal-free and unit-tested
+(`test/aless_*`). The shell itself is exercised headlessly through
+`Aless.feed`, which folds synthetic events through the real update loop —
 including the watch pipeline against real on-disk writes
-(`test/alice_app_unit_test.aql`). Rendering and raw key decoding are
+(`test/aless_app_unit_test.aql`). Rendering and raw key decoding are
 covered by a manual PTY smoke:
 
 ```bash
-printf '…keys…' | script -qec "stty cols 130 rows 32; aql alice.aql" /dev/null
+printf '…keys…' | script -qec "stty cols 130 rows 32; aql aless.aql" /dev/null
 ```
 
 (a real terminal is nicer). The AQL-runtime pitfalls this codebase had
@@ -156,13 +156,13 @@ to design around — and the idioms that dodge them — are catalogued in
 Seven suites under `test/` (run each with `aql test/<name>.aql`):
 
 ```bash
-aql test/alice_fmt_unit_test.aql    # format detection + load
-aql test/alice_doc_unit_test.aql    # document → row model
-aql test/alice_doc_prop_test.aql    # property-based row-model invariants
-aql test/alice_nav_unit_test.aql    # the jless keymap fold
-aql test/alice_tabs_unit_test.aql   # tab set + reload re-anchor
-aql test/alice_app_unit_test.aql    # headless full-app integration
-aql test/alice_smoke_test.aql       # every fixture format loads
+aql test/aless_fmt_unit_test.aql    # format detection + load
+aql test/aless_doc_unit_test.aql    # document → row model
+aql test/aless_doc_prop_test.aql    # property-based row-model invariants
+aql test/aless_nav_unit_test.aql    # the jless keymap fold
+aql test/aless_tabs_unit_test.aql   # tab set + reload re-anchor
+aql test/aless_app_unit_test.aql    # headless full-app integration
+aql test/aless_smoke_test.aql       # every fixture format loads
 ```
 
 Each assertion suite ends by asserting `Test.fail-count` is `0` and

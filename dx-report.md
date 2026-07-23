@@ -1,4 +1,4 @@
-# Developer-experience report: `alice` on AQL
+# Developer-experience report: `aless` on AQL
 
 **AQL build under test:** `aql-lang/aql` @ `c1d2a1a` (main, 2026-07-20),
 built from source in-workspace (`cd cmd/go && go build ./aql`; note
@@ -6,7 +6,7 @@ built from source in-workspace (`cd cmd/go && go build ./aql`; note
 be set to readonly or vendor when in workspace mode" — the flag is only
 for standalone clones).
 
-**Context:** `alice` is a jless-style TUI file viewer with tabs and
+**Context:** `aless` is a jless-style TUI file viewer with tabs and
 watch-reload, written in AQL on the freshly-landed `aql:tui` stack
 (upstream 2026-07-17). It is the first real-world exercise of `aql:tui`,
 `aql:io` watching, the actor words, and deep cross-module call chains.
@@ -31,16 +31,16 @@ or to a **recursive fn** completes without binding — no error at the
 def, then the *next* statement raises `undefined_word` for the name:
 
 ```aql
-def with-active fn [[state:Map tab:Map] [Map] [ AliceTabs.put-active state (tab) ]]
+def with-active fn [[state:Map tab:Map] [Map] [ AlessTabs.put-active state (tab) ]]
 # inside a case arm several frames deep:
 def s3 (with-active (s2) (tabw))     # completes, binds NOTHING
-def err ((AliceTabs.active (s3)) …)     # [aql/undefined_word]: s3
+def err ((AlessTabs.active (s3)) …)     # [aql/undefined_word]: s3
 ```
 
 Replacing the alias with the direct module call (`def s3
-(AliceTabs.put-active (s2) (tabw))`) binds correctly; converting recursive
+(AlessTabs.put-active (s2) (tabw))`) binds correctly; converting recursive
 helpers (`add-ancestors`, `surviving-anchor`) to `fold`s fixed the same
-failure in `AliceTabs.reanchor`/`reveal`. Every module now avoids local
+failure in `AlessTabs.reanchor`/`reveal`. Every module now avoids local
 alias fns and recursion in state-machinery as a matter of policy.
 
 **Root-caused & fixed** (on the tracked aql branch): reduced to a
@@ -82,7 +82,7 @@ better; the compiler covers it on every path but the diagnostic
 interpreter.) The fold/direct-call workarounds above are retained because
 this viewer also runs on stock aql main, where the fix has yet to merge —
 they dispatch correctly either way. (Pre-fix shapes are in this repo's git history,
-`alice-app.aql`/`alice-tabs.aql` before 7c6f739.)
+`aless-app.aql`/`aless-tabs.aql` before 7c6f739.)
 
 ### 2. 🔴 `IO.watch` callbacks are never delivered while `Tui.run` runs
 
@@ -91,8 +91,8 @@ no callback, no `send`, nothing — while the *identical* registration in
 a headless script delivers within milliseconds. Repro pair:
 
 ```aql
-# headless: fires (op=write lands in /tmp/alice-fire.txt)
-def fire fn [[ev:Map] [Integer] [ IO.write (make Pathon "/tmp/alice-fire.txt") "hit" end drop 0 ]]
+# headless: fires (op=write lands in /tmp/aless-fire.txt)
+def fire fn [[ev:Map] [Integer] [ IO.write (make Pathon "/tmp/aless-fire.txt") "hit" end drop 0 ]]
 IO.watch (make Pathon ".") [fire] {match: "w.json"}
 IO.write (make Pathon "./w.json") "{}" end drop
 TimeUtil.sleep 800
@@ -126,7 +126,7 @@ print (each [ var [[k] (hop ((doc) get (k))) ] ] (keys (doc)))  # ["leaf"] ✗
 ```
 
 **Workaround (shipped):** type dispatch in shared data-plumbing uses
-single-sig fns with native `is`-chains (`alice-doc.aql`
+single-sig fns with native `is`-chains (`aless-doc.aql`
 `node-kind`/`get-seg`/`has-seg`); multi-sig overloads only where the
 dispatch happens directly on an expression at the call site.
 
@@ -162,11 +162,11 @@ survive; params do not). **Workaround:** bind first — `def out {x:
 `aql script.aql a b c` silently ignores `a b c` (the CLI reads only the
 script path), and no word exposes environment variables. A CLI tool
 written in AQL cannot receive "which file to open" from its command
-line — so `alice`'s baseline launch story is `aql alice.aql` + `:open`,
-or an `aql -e 'import … Alice.run {files:[…]}'` one-liner. RFC:
+line — so `aless`'s baseline launch story is `aql aless.aql` + `:open`,
+or an `aql -e 'import … Aless.run {files:[…]}'` one-liner. RFC:
 `proposals/script-argv-and-env.md` (an `IO.args` word + CLI plumbing;
 the launcher already reads it behind a `do/error` feature-detect, so a
-build that carries it accepts `aql alice.aql notes.json`).
+build that carries it accepts `aql aless.aql notes.json`).
 
 ### 6. 🟡 Checker friction: several false-error shapes gate execution
 
@@ -187,10 +187,10 @@ parentheses; all shipped):
   helpers `as-str`/`as-int`, typed accessors like `row-at`).
 - A top-level *script*'s relative imports are CWD-relative, while an
   *imported* module's imports resolve against its own directory. When
-  the modules lived under `viewer/`, `aql check viewer/alice-nav.aql`
+  the modules lived under `viewer/`, `aql check viewer/aless-nav.aql`
   from the repo root couldn't resolve the module's sibling
-  `./alice-doc.aql`. Flattening every module to the repo root removed
-  the mismatch — `aql check alice-nav.aql` now resolves its siblings —
+  `./aless-doc.aql`. Flattening every module to the repo root removed
+  the mismatch — `aql check aless-nav.aql` now resolves its siblings —
   so the whole tree checks clean file-by-file from the root.
 
 ### 7. 🟡 `fold`'s var binding order contradicts its description
@@ -225,7 +225,7 @@ surfaces only hard read/parse errors.
   the whole tabnas family (plus `{fmt}` override, `{field:
   {separation:"\t"}}` for CSV variants — the "no tsv parse kind" gap in
   earlier planning was wrong at the IO.read level; only the `parse`
-  word's kind set lacks it). `alice-fmt.aql` is ~40 lines because of
+  word's kind set lacks it). `aless-fmt.aql` is ~40 lines because of
   this.
 - **The `aql:tui` core held up**: alt-screen, diffed rendering, widget
   layout, key decoding, `Tui.quit`, and the "any mailbox message folds
@@ -234,7 +234,7 @@ surfaces only hard read/parse errors.
 - **`canon` is the right display serializer** (no HTML escaping, smart
   quote switching, `none`/numbers/bools render cleanly).
 - **Headless TUI testing via an exported feed word**: exporting the
-  update fold (`Alice.feed`) lets a plain test suite drive the real app —
+  update fold (`Aless.feed`) lets a plain test suite drive the real app —
   command mode, tabs, search, watch-reload against real disk writes —
   with no terminal. Pattern recommended for any aql:tui app (an
   AQL-reachable virtual backend would still be better — see
@@ -268,7 +268,7 @@ keeps the shared ID when both arm carriers are the same identity (an
 identity no-op merge), so the binding's compile seat survives; a genuine
 reassignment (differing IDs) keeps the fresh-ID join. With the fix the
 `def midpane (if … [help-pane] [tree-pane …])` form compiles with zero
-refusals; `alice-view.aql` branches on the whole widget list instead of
+refusals; `aless-view.aql` branches on the whole widget list instead of
 binding the pane so that it also compiles cleanly on stock aql main,
 where the fix has yet to merge. Pinned upstream by
 `lang/go/bytecode_ifbranch_operand_test.go` and the

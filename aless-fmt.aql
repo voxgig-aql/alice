@@ -1,12 +1,12 @@
-# alice-fmt: format detection and file loading for the alice viewer.
+# aless-fmt: format detection and file loading for the aless viewer.
 #
-# Public surface (the AliceFmt namespace exported at the bottom):
+# Public surface (the AlessFmt namespace exported at the bottom):
 #
-#   AliceFmt.kind-of path opts   → String   format kind for a path
+#   AlessFmt.kind-of path opts   → String   format kind for a path
 #                                        (opts {kind: "…"} overrides)
-#   AliceFmt.load path opts      → Map      {ok: true, doc, kind, text}
+#   AlessFmt.load path opts      → Map      {ok: true, doc, kind, text}
 #                                      | {ok: false, err, code, kind}
-#   AliceFmt.kinds               → Map      the extension → kind table
+#   AlessFmt.kinds               → Map      the extension → kind table
 #
 # Parsing itself is delegated to aql's `IO.read`, which infers the
 # format from the file extension (csv, tsv, json, jsonic, json5,
@@ -127,7 +127,7 @@ def load-file fn [
 ]
 
 
-export "AliceFmt" {
+export "AlessFmt" {
   kind-of: kind-of/r
   load: load-file/r
   kinds: ext-kind-map

@@ -1,6 +1,6 @@
 #!/bin/bash
 # SessionStart hook: ensure the `aql` interpreter is available so the agent can
-# run alice and its tests. alice tracks aql MAIN (the aql:tui stack it needs
+# run aless and its tests. aless tracks aql MAIN (the aql:tui stack it needs
 # postdates any tagged build), so this builds aql from the latest main.
 #
 # Synchronous and idempotent: skips the build if a binary already exists, and
@@ -53,9 +53,9 @@ fi
 
 # Fast confidence check: run the smoke suite if aql is usable. Never fail the
 # session on a check error.
-if [ -x "$AQL" ] && [ -f "$CLAUDE_PROJECT_DIR/test/alice_smoke_test.aql" ]; then
-  if ( cd "$CLAUDE_PROJECT_DIR" && "$AQL" test/alice_smoke_test.aql >/dev/null 2>&1 ); then
-    log "Smoke check passed (aql test/alice_smoke_test.aql)."
+if [ -x "$AQL" ] && [ -f "$CLAUDE_PROJECT_DIR/test/aless_smoke_test.aql" ]; then
+  if ( cd "$CLAUDE_PROJECT_DIR" && "$AQL" test/aless_smoke_test.aql >/dev/null 2>&1 ); then
+    log "Smoke check passed (aql test/aless_smoke_test.aql)."
   else
     log "NOTE: smoke check did not pass; the aql toolchain may be incomplete or main may have regressed."
   fi

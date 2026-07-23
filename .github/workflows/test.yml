@@ -1,6 +1,6 @@
 name: tests
 
-# alice is written in AQL and tracks aql MAIN (the aql:tui stack it needs
+# aless is written in AQL and tracks aql MAIN (the aql:tui stack it needs
 # postdates any tagged build), so CI builds the interpreter from source at
 # main on every run. An upstream regression can therefore break CI
 # independently of any change here — the accepted trade-off for riding the
@@ -18,7 +18,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out alice
+      - name: Check out aless
         uses: actions/checkout@v4
 
       - name: Set up Go
@@ -45,22 +45,22 @@ jobs:
 
       - name: Static check (launcher + modules)
         run: |
-          for f in alice.aql alice-app.aql alice-fmt.aql alice-doc.aql \
-                   alice-nav.aql alice-tabs.aql alice-view.aql; do
+          for f in aless.aql aless-app.aql aless-fmt.aql aless-doc.aql \
+                   aless-nav.aql aless-tabs.aql aless-view.aql; do
             echo "== check $f =="
             aql check "$f"
           done
 
       - name: Suites (interpreter)
         run: |
-          for t in test/alice_*_test.aql; do
+          for t in test/aless_*_test.aql; do
             echo "== $t =="
             aql "$t"
           done
 
       - name: Suites (bytecode — force-compile parity)
         run: |
-          for t in test/alice_*_test.aql; do
+          for t in test/aless_*_test.aql; do
             echo "== $t =="
             aql --force-compile "$t"
           done

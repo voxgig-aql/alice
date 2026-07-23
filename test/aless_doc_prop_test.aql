@@ -1,13 +1,13 @@
-# alice viewer: property tests for alice-doc.aql, in the imperative
+# aless viewer: property tests for aless-doc.aql, in the imperative
 # `Test.check-prop` form (GEN-BODY leaves one value, PROP-BODY returns a
 # Boolean).
 #
 # Run from the repo root:
-#   aql test/alice_doc_prop_test.aql
+#   aql test/aless_doc_prop_test.aql
 
 
 import "aql:test" end
-import "./alice-doc.aql" end
+import "./aless-doc.aql" end
 
 
 # A fixture with maps, lists, nesting, and scalars in all positions.
@@ -19,8 +19,8 @@ def _apply fn [
   [doc:Any ops:List] [List] [
     fold [ var [[op rows]
       def ix ((op div 2) mod (size (rows)))
-      if ((op mod 2) eq 0) [ AliceDoc.expand doc (rows) (ix) ] [ AliceDoc.collapse (rows) (ix) ]
-    ]] (ops) (AliceDoc.top doc)
+      if ((op mod 2) eq 0) [ AlessDoc.expand doc (rows) (ix) ] [ AlessDoc.collapse (rows) (ix) ]
+    ]] (ops) (AlessDoc.top doc)
   ]
 ]
 
@@ -37,7 +37,7 @@ Test.check-prop "splice-rebuild-round-trip"
   [
     var [[ops]
       def rows (_apply (_pdoc) (ops))
-      (AliceDoc.rebuild (_pdoc) (AliceDoc.expanded-of (rows))) deq (rows)
+      (AlessDoc.rebuild (_pdoc) (AlessDoc.expanded-of (rows))) deq (rows)
     ]
   ]
   30 1 0
@@ -75,7 +75,7 @@ Test.check-prop "expand-collapse-identity"
       def ix ((ops get 0) mod (size (rows)))
       def rw (rows get (ix))
       if (((rw get "kind") eq "leaf") or (rw get "open")) [ true ] [
-        (AliceDoc.collapse (AliceDoc.expand (_pdoc) (rows) (ix)) (ix)) deq (rows)
+        (AlessDoc.collapse (AlessDoc.expand (_pdoc) (rows) (ix)) (ix)) deq (rows)
       ]
     ]
   ]
@@ -91,7 +91,7 @@ Test.check-prop "subtree-end-bounds"
     var [[ops]
       def rows (_apply (_pdoc) (ops))
       def ix ((ops get 0) mod (size (rows)))
-      def e (AliceDoc.subtree-end (rows) (ix))
+      def e (AlessDoc.subtree-end (rows) (ix))
       ((e) gt (ix)) and ((e) lte (size (rows)))
     ]
   ]

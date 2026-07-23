@@ -1,0 +1,40 @@
+# aless viewer smoke test: every fixture format loads through AlessFmt and
+# renders rows through AlessDoc without an error. No assertions — a clean
+# end-to-end run is the pass.
+#
+# Run from the repo root:
+#   aql test/aless_smoke_test.aql
+
+
+import "./aless-fmt.aql" end
+import "./aless-doc.aql" end
+
+
+print "--- aless viewer smoke: load + rows for every fixture ---"
+
+def _fixtures [
+  "sample.json", "sample.jsonic", "sample.json5", "sample.jsonc",
+  "sample.csv", "sample.tsv", "sample.toml", "sample.yaml",
+  "sample.xml", "sample.ini", "sample.zon", "sample.md",
+  "bad.json", "lines.txt"
+]
+
+def _walk (each [ var [[nm]
+  def res (AlessFmt.load `test/fixtures/${nm}` {})
+  def rows (if (res get "ok") [ AlessDoc.top (res get "doc") ] [ [] ])
+  # expand the first expandable child row, then render every visible
+  # row's key and value strings — the per-frame work the viewer does
+  def rows2 (if ((size (rows)) gt 1) [ AlessDoc.expand (res get "doc") (rows) 1 ] [ (rows) ])
+  def lines (each [ var [[rw]
+    `${(AlessDoc.key-str (rw))}=${(AlessDoc.value-str (res get "doc") (rw))}`
+  ]] (rows2))
+  print (`${nm}: kind=${(res get "kind")} rows=${(size (rows2))}`)
+  0
+]] (_fixtures))
+
+print "--- search sweep over the json fixture ---"
+def _res (AlessFmt.load "test/fixtures/sample.json" {})
+def _hits (AlessDoc.search (_res get "doc") "title")
+print (`title hits: ${(size (_hits))}`)
+
+print "all green"
