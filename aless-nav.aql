@@ -1,4 +1,4 @@
-# alice-nav: the jless-style keymap as a pure fold over a tab's view
+# aless-nav: the jless-style keymap as a pure fold over a tab's view
 # state. No terminal words — fully unit-testable.
 #
 # A TAB map carries (at least) the view-state fields this module reads
@@ -6,12 +6,12 @@
 #
 #   { doc, rows, focus, scroll, xoff, pending, … }
 #
-# Public surface (the AliceNav namespace exported at the bottom):
+# Public surface (the AlessNav namespace exported at the bottom):
 #
-#   AliceNav.key tab ev vh     → tab'   fold one key event into a tab
+#   AlessNav.key tab ev vh     → tab'   fold one key event into a tab
 #                                    (vh = tree-pane height in rows)
-#   AliceNav.follow tab vh     → tab'   clamp focus + scroll into view
-#   AliceNav.index-of tab path → Integer  row index of a path (-1 absent)
+#   AlessNav.follow tab vh     → tab'   clamp focus + scroll into view
+#   AlessNav.index-of tab path → Integer  row index of a path (-1 absent)
 #
 # Key map (jless subset + noted deviations):
 #   j / down    focus down          k / up      focus up
@@ -25,12 +25,12 @@
 #   C-e C-y     scroll only         z then z/t/b  center / top / bottom
 #   . / ,       horizontal value scroll right / left
 #
-# Quit, tabs, command / search modes are the shell's concern (alice.aql);
+# Quit, tabs, command / search modes are the shell's concern (aless.aql);
 # events not handled here return the tab unchanged.
 
 
 import "aql:math-util"
-import "./alice-doc.aql"
+import "./aless-doc.aql"
 
 
 # --- small helpers ---------------------------------------------------
@@ -78,10 +78,10 @@ def follow fn [
 def index-of fn [
   [tab:Map p:List] [Integer] [
     def rows (tab get "rows")
-    def key (AliceDoc.path-key (p))
+    def key (AlessDoc.path-key (p))
     fold [ var [[j acc]
       if ((acc) gte 0) [ (acc) ] [
-        if ((AliceDoc.path-key ((rows get (j)) get "path")) eq (key)) [ (j) ] [ -1 ]
+        if ((AlessDoc.path-key ((rows get (j)) get "path")) eq (key)) [ (j) ] [ -1 ]
       ]
     ]] (range 0 (size (rows)) 1) -1
   ]
@@ -115,7 +115,7 @@ def prev-sibling fn [
 def next-sibling fn [
   [rows:List fx:Integer] [Integer] [
     def d ((rows get fx) get "depth")
-    def e (AliceDoc.subtree-end (rows) (fx))
+    def e (AlessDoc.subtree-end (rows) (fx))
     if ((e) lt (size (rows))) [
       if (((rows get (e)) get "depth") eq (d)) [ (e) ] [ -1 ]
     ] [ -1 ]
@@ -168,7 +168,7 @@ def prev-depth-change fn [
 def do-expand fn [
   [tab:Map vh:Integer] [Map] [
     def fx (tab get "focus")
-    with-rows tab (AliceDoc.expand (tab get "doc") (tab get "rows") (fx)) vh
+    with-rows tab (AlessDoc.expand (tab get "doc") (tab get "rows") (fx)) vh
   ]
 ]
 
@@ -178,12 +178,12 @@ def do-collapse fn [
     def fx (tab get "focus")
     def rw (rows get (fx))
     if (rw get "open") [
-      with-rows tab (AliceDoc.collapse (rows) (fx)) vh
+      with-rows tab (AlessDoc.collapse (rows) (fx)) vh
     ] [
       # closed or leaf: jless moves to (and collapses at) the parent
       def pi (parent-index (rows) (fx))
       if ((pi) eq (fx)) [ (tab) ] [
-        with-rows (with-focus tab (pi) vh) (AliceDoc.collapse (rows) (pi)) vh
+        with-rows (with-focus tab (pi) vh) (AlessDoc.collapse (rows) (pi)) vh
       ]
     ]
   ]
@@ -193,7 +193,7 @@ def do-toggle fn [
   [tab:Map vh:Integer] [Map] [
     def rw ((tab get "rows") get (tab get "focus"))
     if (rw get "open") [
-      with-rows tab (AliceDoc.collapse (tab get "rows") (tab get "focus")) vh
+      with-rows tab (AlessDoc.collapse (tab get "rows") (tab get "focus")) vh
     ] [ do-expand tab vh ]
   ]
 ]
@@ -202,14 +202,14 @@ def do-toggle fn [
 # hard row cap (interpreted aql: unbounded deep-expand of a huge file
 # would freeze the loop). The cap is checked BEFORE each step against
 # the projected row count — a single container's direct-child count
-# (`n`) is how many rows one `AliceDoc.expand` adds — so one wide
+# (`n`) is how many rows one `AlessDoc.expand` adds — so one wide
 # container cannot overshoot the cap in a single expansion; an
 # expansion that would exceed it is rejected and deep-expand stops.
 def deep-expand fn [
   [tab:Map vh:Integer fuel:Integer] [Map] [
     def rows (tab get "rows")
     def fx (tab get "focus")
-    def e (AliceDoc.subtree-end (rows) (fx))
+    def e (AlessDoc.subtree-end (rows) (fx))
     def cand (fold [ var [[j acc]
       if ((acc) gte 0) [ (acc) ] [
         def rw (rows get (j))
@@ -219,7 +219,7 @@ def deep-expand fn [
     if (((cand) lt 0) or ((fuel) lte 0)) [ (tab) ] [
       def grow ((rows get (cand)) get "n")
       if (((size (rows)) add (grow)) gt 5000) [ (tab) ] [
-        deep-expand (with-rows tab (AliceDoc.expand (tab get "doc") (rows) (cand)) vh) vh ((fuel) sub 1)
+        deep-expand (with-rows tab (AlessDoc.expand (tab get "doc") (rows) (cand)) vh) vh ((fuel) sub 1)
       ]
     ]
   ]
@@ -259,7 +259,7 @@ def move-out fn [
     def fx (tab get "focus")
     def rw (rows get (fx))
     if (rw get "open") [
-      with-rows tab (AliceDoc.collapse (rows) (fx)) vh
+      with-rows tab (AlessDoc.collapse (rows) (fx)) vh
     ] [
       move-to-maybe tab (if ((parent-index (rows) (fx)) eq (fx)) [ -1 ] [ parent-index (rows) (fx) ]) vh
     ]
@@ -351,7 +351,7 @@ def nav-key fn [
 ]
 
 
-export "AliceNav" {
+export "AlessNav" {
   key: nav-key/r
   follow: follow/r
   index-of: index-of/r

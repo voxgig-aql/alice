@@ -1,7 +1,7 @@
 # proposals/
 
 Upstream **AQL-language** design proposals (RFCs) surfaced while building
-`alice` — changes to the `aql` interpreter itself, not to this app. They
+`aless` — changes to the `aql` interpreter itself, not to this app. They
 live here so the idea is captured next to the code that motivated it.
 
 - One proposal per file, kebab-case.

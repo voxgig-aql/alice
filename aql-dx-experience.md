@@ -1,6 +1,6 @@
 # Writing real code in AQL — a developer-experience report
 
-*Based on building `alice` — a jless-style TUI file viewer, ~2,000 lines
+*Based on building `aless` — a jless-style TUI file viewer, ~2,000 lines
 across seven modules — plus two fixes to the interpreter itself. This is
 a reflection on the **experience** of writing AQL; the repo's
 [`dx-report.md`](dx-report.md) is the factual bug catalogue this
@@ -31,8 +31,8 @@ AQL is concatenative — words operate on a value stream — but with a
 call shapes:
 
 ```aql
-AliceDoc.expand doc rows ix      # forward form
-rows AliceDoc.expand doc ix      # piping form (receiver flows in)
+AlessDoc.expand doc rows ix      # forward form
+rows AlessDoc.expand doc ix      # piping form (receiver flows in)
 ```
 
 Parens terminate a call and turn it into a value; `def`/`fn`/`case`/`if`/
@@ -43,15 +43,15 @@ tool-driven and good: `aql describe` and `aql help` answer "what words
 exist / what does this do" straight from the binary.
 
 The core model is easy to like. Once the forward/piping duality clicks,
-pure data transformation reads cleanly, and the pure half of alice
-(`alice-doc`, `alice-nav`, `alice-tabs`) is genuinely tidy.
+pure data transformation reads cleanly, and the pure half of aless
+(`aless-doc`, `aless-nav`, `aless-tabs`) is genuinely tidy.
 
 ## What made it a pleasure
 
 - **`IO.read` is a one-word universal loader.** Extension-inferred
   parsing across the whole format family — json, jsonic, json5, jsonc,
   csv, tsv, toml, yaml, xml, ini, zon, markdown — with a `{fmt}` override
-  and CSV-separator options. `alice-fmt.aql`, the module that "supports
+  and CSV-separator options. `aless-fmt.aql`, the module that "supports
   every format aql can parse," is about 40 lines. That's the single best
   moment of the project: a hard-sounding requirement collapsed to almost
   nothing.
@@ -75,7 +75,7 @@ pure data transformation reads cleanly, and the pure half of alice
 
 Almost every serious problem I hit shares one signature: **it works at
 the small scale and breaks at composition, with no error at the fault
-site.** Three examples, all real, all from alice:
+site.** Three examples, all real, all from aless:
 
 **1. A `def` can silently bind nothing in a deep call chain.** In an
 update-loop chain (fn → `case` arm → fn → fn), a `def` whose value is a
@@ -83,9 +83,9 @@ call to a local alias fn or a recursive helper *completes without
 binding*. No error at the `def`; the *next* line raises `undefined_word`:
 
 ```aql
-def with-active fn [[state:Map tab:Map] [Map] [ AliceTabs.put-active state (tab) ]]
+def with-active fn [[state:Map tab:Map] [Map] [ AlessTabs.put-active state (tab) ]]
 def s3 (with-active (s2) (tabw))     # completes, binds NOTHING
-def err ((AliceTabs.active (s3)) …)  # [aql/undefined_word]: s3
+def err ((AlessTabs.active (s3)) …)  # [aql/undefined_word]: s3
 ```
 
 The same code works at the top level and in a unit test. It only fails in
@@ -150,7 +150,7 @@ to run your program.
 
 ## The idiom tax
 
-By the end, alice had a distinct "house style" — and almost every rule in
+By the end, aless had a distinct "house style" — and almost every rule in
 it exists to dodge a sharp edge, not to express intent:
 
 | Idiom | Exists because |
@@ -171,7 +171,7 @@ would have saved me most of a day.
 ## Testing when green doesn't mean correct
 
 The single most important pattern I found was **exporting the update fold
-so tests can drive the real app headlessly** (`Alice.feed`) — command
+so tests can drive the real app headlessly** (`Aless.feed`) — command
 mode, tabs, search, and watch-reload against real disk writes, no
 terminal. Recommend it for any `aql:tui` app.
 
