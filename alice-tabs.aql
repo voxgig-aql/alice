@@ -1,0 +1,237 @@
+# alice-tabs: tab records and tab-set operations for the alice viewer, plus
+# the reload re-anchor algorithm. Pure — no terminal or watcher words
+# (the shell owns IO.watch handles; this module only stores them).
+#
+# A TAB map:
+#
+#   { id: Integer            stable id (watch messages name tabs by id)
+#     path: String           the file path as opened
+#     kind: String           format kind actually used
+#     doc: Any               parsed document ([] when load failed)
+#     rows, focus, scroll, xoff, pending   view state (see alice-nav)
+#     watch: Boolean         auto-reload on change?
+#     watcher: Any           IO.watch handle (none when not watching)
+#     err: String|None       load/reload error, shown in the status bar
+#     gone: Boolean          file deleted while watched
+#     gen: Integer           reload generation counter
+#     text: Boolean          raw-text (line list) document? }
+#
+# Public surface (the AliceTabs namespace exported at the bottom):
+#
+#   AliceTabs.make id path opts        → Map      load a file into a fresh tab
+#   AliceTabs.open state path opts     → Map      append + activate a new tab
+#   AliceTabs.close state              → Map      drop the active tab
+#   AliceTabs.activate state n        → Map      clamp-activate tab n
+#   AliceTabs.next state / prev state → Map      cycle activation
+#   AliceTabs.active state             → Map      the active tab
+#   AliceTabs.put-active state tab     → Map      store an updated active tab
+#   AliceTabs.reanchor tab res vh      → Map      fold a reload result in,
+#                                              retaining the view position
+#
+# The re-anchor algorithm (reload with retained position):
+#   1. anchor = focused row's path; line = its screen line.
+#   2. Keep only expansions whose paths still resolve in the new doc.
+#   3. Walk the anchor up to its nearest surviving ancestor; mark that
+#      ancestor's own ancestors expanded so the anchor is visible.
+#   4. Rebuild rows; focus the anchor; scroll so focus sits on the same
+#      screen line, clamped.
+
+
+import "aql:math-util"
+import "./alice-fmt.aql"
+import "./alice-doc.aql"
+
+
+# --- construction ----------------------------------------------------
+
+def mk-tab fn [
+  [id:Integer path:String opts:Map] [Map] [
+    def res (AliceFmt.load path opts)
+    def ok (res get "ok")
+    def doc (if (ok) [ res get "doc" ] [ [] ])
+    def out {
+      id: (id), path: (path), kind: (res get "kind"), doc: (doc),
+      rows: (AliceDoc.top (doc)), focus: 0, scroll: 0, xoff: 0, pending: "",
+      watch: false,
+      err: (if (ok) [ none ] [ res get "err" ]),
+      gone: false, gen: 0, text: ((res get "text") otherwise false),
+      opts: (opts)
+    }
+    out
+  ]
+]
+
+
+# --- tab-set operations ---------------------------------------------
+
+def active-tab fn [
+  [state:Map] [Map] [
+    (state get "tabs") get (state get "active")
+  ]
+]
+
+def put-active fn [
+  [state:Map tab:Map] [Map] [
+    def tabs (state get "tabs")
+    def i (state get "active")
+    (state) set tabs (flatten [ (take i tabs) [(tab)] (shed ((i) add 1) tabs) ])
+  ]
+]
+
+def open-tab fn [
+  [state:Map path:String opts:Map] [Map] [
+    def id (state get "next")
+    def tb (mk-tab (id) path opts)
+    def tabs2 (push (tb) (state get "tabs"))
+    def s2 ((state) set tabs (tabs2))
+    def s3 ((s2) set next ((id) add 1))
+    (s3) set active ((size (tabs2)) sub 1)
+  ]
+]
+
+# Close the active tab. The caller must treat a resulting empty tab
+# list as "quit".
+def close-tab fn [
+  [state:Map] [Map] [
+    def tabs (state get "tabs")
+    def i (state get "active")
+    def tabs2 (flatten [ (take i tabs) (shed ((i) add 1) tabs) ])
+    def s2 ((state) set tabs (tabs2))
+    (s2) set active (MathUtil.max 0 (MathUtil.min (i) ((size (tabs2)) sub 1)))
+  ]
+]
+
+def activate fn [
+  [state:Map n:Integer] [Map] [
+    def hi ((size (state get "tabs")) sub 1)
+    (state) set active (MathUtil.max 0 (MathUtil.min n (hi)))
+  ]
+]
+
+def next-tab fn [
+  [state:Map] [Map] [
+    def n (size (state get "tabs"))
+    (state) set active (((state get "active") add 1) mod (n))
+  ]
+]
+
+def prev-tab fn [
+  [state:Map] [Map] [
+    def n (size (state get "tabs"))
+    (state) set active ((((state get "active") add (n)) sub 1) mod (n))
+  ]
+]
+
+
+# --- reload with retained position ----------------------------------
+
+# A typed accessor so the checker knows a row's path is a List.
+def row-path fn [
+  [rw:Map] [List] [ rw get "path" ]
+]
+
+def clampi fn [
+  [x:Integer lo:Integer hi:Integer] [Integer] [
+    if ((x) lt (lo)) [ (lo) ] [ if ((x) gt (hi)) [ (hi) ] [ (x) ] ]
+  ]
+]
+
+# Longest prefix of p that still resolves in doc (the root [] always
+# does). Fold-based on purpose: a def bound from a RECURSIVE fn call
+# can silently fail to bind in deep cross-module call chains (see the
+# repo dx-report), so the tab machinery avoids recursion entirely.
+def surviving-anchor fn [
+  [doc:Any p:List] [List] [
+    def n (size (p))
+    def best (fold [ var [[j acc]
+      if ((acc) gte 0) [ (acc) ] [
+        if (AliceDoc.has-path doc (take (j) p)) [ (j) ] [ -1 ]
+      ]
+    ]] (reverse (range 0 ((n) add 1) 1)) -1)
+    take (if ((best) lt 0) [ 0 ] [ (best) ]) p
+  ]
+]
+
+# Mark every proper ancestor of p (including the root) expanded, so p
+# renders after a rebuild. Fold-based, not recursive (see above).
+def add-ancestors fn [
+  [exps:Map p:List] [Map] [
+    fold [ var [[j acc]
+      (acc) set (AliceDoc.path-key (take (j) p)) true
+    ]] (range 0 (size (p)) 1) (exps)
+  ]
+]
+
+def index-of-path fn [
+  [rows:List p:List] [Integer] [
+    def want (AliceDoc.path-key (p))
+    fold [ var [[j acc]
+      if ((acc) gte 0) [ (acc) ] [
+        if ((AliceDoc.path-key ((rows get (j)) get "path")) eq (want)) [ (j) ] [ -1 ]
+      ]
+    ]] (range 0 (size (rows)) 1) -1
+  ]
+]
+
+def reanchor fn [
+  [tab:Map res:Map vh:Integer] [Map] [
+    if ((res get "ok") not) [
+      # keep the old document and view; surface the error
+      def t2 ((tab) set err (res get "err"))
+      (t2) set gen ((tab get "gen") add 1)
+    ] [
+      def doc2 (res get "doc")
+      def rows (tab get "rows")
+      def n (size (rows))
+      def fx (clampi (tab get "focus") 0 ((n) sub 1))
+      def anchor (row-path (rows get fx))
+      def line ((fx) sub (tab get "scroll"))
+      def exps (fold [ var [[rw acc]
+        if ((rw get "open") and (AliceDoc.has-path (doc2) (rw get "path"))) [
+          (acc) set (AliceDoc.path-key (rw get "path")) true
+        ] [ (acc) ]
+      ]] (rows) {})
+      def anc (surviving-anchor (doc2) (anchor))
+      def exps2 (add-ancestors (exps) (anc))
+      def rows2 (AliceDoc.rebuild (doc2) (exps2))
+      def n2 (size (rows2))
+      def fx2 (clampi (index-of-path (rows2) (anc)) 0 ((n2) sub 1))
+      def maxsc (clampi ((n2) sub (vh)) 0 (n2))
+      def sc2 (clampi ((fx2) sub (line)) 0 (maxsc))
+      def t2 ((((((tab) set doc (doc2)) set rows (rows2)) set focus (fx2)) set scroll (sc2)) set xoff (tab get "xoff"))
+      def t3 (((t2) set err none) set gone false)
+      def t4 ((t3) set kind (res get "kind"))
+      def t5 ((t4) set text ((res get "text") otherwise false))
+      (t5) set gen ((tab get "gen") add 1)
+    ]
+  ]
+]
+
+
+# Jump the view to a path: expand its ancestors, focus it, and center
+# the window on it (used by search and n/N cycling).
+def reveal fn [
+  [tab:Map p:List vh:Integer] [Map] [
+    def exps (add-ancestors (AliceDoc.expanded-of (tab get "rows")) (p))
+    def rows2 (AliceDoc.rebuild (tab get "doc") (exps))
+    def n2 (size (rows2))
+    def fx (clampi (index-of-path (rows2) (p)) 0 ((n2) sub 1))
+    def maxsc (clampi ((n2) sub (vh)) 0 (n2))
+    def t2 (((tab) set rows (rows2)) set focus (fx))
+    (t2) set scroll (clampi ((fx) sub ((vh) div 2)) 0 (maxsc))
+  ]
+]
+
+
+export "AliceTabs" {
+  reveal: reveal/r
+  make: mk-tab/r
+  open: open-tab/r
+  close: close-tab/r
+  activate: activate/r
+  next: next-tab/r
+  prev: prev-tab/r
+  active: active-tab/r
+  put-active: put-active/r
+  reanchor: reanchor/r
+}

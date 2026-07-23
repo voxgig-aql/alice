@@ -1,0 +1,108 @@
+# alice viewer: unit tests for alice-fmt.aql (format detection + load).
+#
+# Run from the repo root (fixture paths are CWD-relative):
+#   aql test/alice_fmt_unit_test.aql
+
+
+import "aql:test" end
+import "./alice-fmt.aql" end
+
+
+# --- kind-of: extension mapping ------------------------------------
+
+[
+  "json"     (AliceFmt.kind-of "a/b/data.json" {})   Assert.equal end
+  "yaml"     (AliceFmt.kind-of "conf.YAML" {})       Assert.equal end
+  "yaml"     (AliceFmt.kind-of "conf.yml" {})        Assert.equal end
+  "ini"      (AliceFmt.kind-of "svc.cfg" {})         Assert.equal end
+  "tsv"      (AliceFmt.kind-of "t.tsv" {})           Assert.equal end
+  "markdown" (AliceFmt.kind-of "README.md" {})       Assert.equal end
+  "text"     (AliceFmt.kind-of "noext" {})           Assert.equal end
+  "text"     (AliceFmt.kind-of "odd.weird" {})       Assert.equal end
+  "text"     (AliceFmt.kind-of "dir.v2/noext" {})    Assert.equal end
+] "kind-of-extensions" Test.test end
+
+
+# --- kind-of: explicit override wins --------------------------------
+
+[
+  "json"   (AliceFmt.kind-of "odd.weird" {kind: "json"})   Assert.equal end
+  "jsonic" (AliceFmt.kind-of "data.json" {kind: "jsonic"}) Assert.equal end
+] "kind-of-override" Test.test end
+
+
+# --- load: structured formats ---------------------------------------
+
+[
+  def r (AliceFmt.load "test/fixtures/sample.json" {})
+  true (r get "ok") Assert.equal end
+  "json" (r get "kind") Assert.equal end
+  false (r get "text") Assert.equal end
+  3 ((r get "doc") get "version") Assert.equal end
+] "load-json" Test.test end
+
+[
+  def r (AliceFmt.load "test/fixtures/sample.csv" {})
+  true (r get "ok") Assert.equal end
+  def d (r get "doc")
+  2 (size (d)) Assert.equal end
+  "ada" ((d get 0) get "name") Assert.equal end
+  "helsinki" ((d get 1) get "city") Assert.equal end
+] "load-csv-records" Test.test end
+
+[
+  def r (AliceFmt.load "test/fixtures/sample.tsv" {})
+  true (r get "ok") Assert.equal end
+  "ada" (((r get "doc") get 0) get "name") Assert.equal end
+] "load-tsv-records" Test.test end
+
+[
+  def r (AliceFmt.load "test/fixtures/sample.toml" {})
+  true (r get "ok") Assert.equal end
+  "ada" (((r get "doc") get "owner") get "name") Assert.equal end
+] "load-toml" Test.test end
+
+[
+  def r (AliceFmt.load "test/fixtures/sample.yaml" {})
+  true (r get "ok") Assert.equal end
+  "one" (((r get "doc") get "items") get 0) Assert.equal end
+] "load-yaml" Test.test end
+
+
+# --- load: raw text falls back to lines -----------------------------
+
+[
+  def r (AliceFmt.load "test/fixtures/lines.txt" {})
+  true (r get "ok") Assert.equal end
+  true (r get "text") Assert.equal end
+  "text" (r get "kind") Assert.equal end
+  4 (size (r get "doc")) Assert.equal end
+  "first line" ((r get "doc") get 0) Assert.equal end
+  "" ((r get "doc") get 2) Assert.equal end
+] "load-text-lines" Test.test end
+
+
+# --- load: explicit kind reroutes the parser ------------------------
+
+[
+  def r (AliceFmt.load "test/fixtures/sample.json" {kind: "text"})
+  true (r get "ok") Assert.equal end
+  true (r get "text") Assert.equal end
+] "load-explicit-kind" Test.test end
+
+
+# --- load: a missing file is a captured failure, not a crash --------
+
+[
+  def r (AliceFmt.load "test/fixtures/no-such-file.json" {})
+  false (r get "ok") Assert.equal end
+  false ((r get "err") is None) Assert.equal end
+] "load-missing-file" Test.test end
+
+
+# --- summary --------------------------------------------------------
+
+"---" print
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
+"all green" print

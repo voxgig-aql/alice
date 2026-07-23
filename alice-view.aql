@@ -1,0 +1,205 @@
+# alice-view: pure widget-tree builders for the alice viewer. State in,
+# widget maps out — no terminal words, so every builder is testable by
+# inspecting the returned maps.
+#
+# Public surface (the AliceView namespace exported at the bottom):
+#
+#   AliceView.render state       → Map    the full screen tree for Tui.run
+#   AliceView.row-line doc row xoff width → String   one rendered tree line
+#
+# Screen layout (Tui.rows):
+#   tab strip   (1 row)   " 1:name* "-style cells, active reversed
+#   tree pane   (flex)    one Tui.text per visible row
+#   status bar  (1 row)   focused path · kind · error/message
+#   bottom bar  (1 row)   command/search input when active, else hints
+
+
+import "aql:tui"
+import "aql:math-util"
+import "aql:string-util"
+import "./alice-doc.aql"
+
+
+# --- small helpers ---------------------------------------------------
+
+def last-part fn [
+  [sep:String s:String] [String] [
+    def parts (StringUtil.split sep s {keepEmpty: true})
+    if ((size (parts)) eq 0) [ (s) ] [ parts get ((size (parts)) sub 1) ]
+  ]
+]
+
+# Clip a line to the [xoff, xoff+width) window, appending an ellipsis
+# when content continues past the right edge.
+def clip fn [
+  [s:String xoff:Integer width:Integer] [String] [
+    def n (size (s))
+    if ((xoff) gte (n)) [ "" ] [
+      def fin (MathUtil.min (n) ((xoff) add (width)))
+      def cut (slice (xoff) (fin) s)
+      if ((fin) lt (n)) [ `${cut}…` ] [ (cut) ]
+    ]
+  ]
+]
+
+
+# --- tree pane -------------------------------------------------------
+
+# A typed wrapper so the checker knows the indent is a String.
+def indent-of fn [
+  [d:Integer] [String] [ StringUtil.repeat d "  " ]
+]
+
+# One rendered line: indent, ▸/▾ marker, key, value.
+def row-line fn [
+  [doc:Any rw:Map xoff:Integer width:Integer] [String] [
+    def ind (indent-of (rw get "depth"))
+    def mk (if ((rw get "kind") eq "leaf") [ "  " ] [
+      if (rw get "open") [ "▾ " ] [ "▸ " ]
+    ])
+    def ks (AliceDoc.key-str (rw))
+    def kp (if ((ks) eq "") [ "" ] [ `${ks}: ` ])
+    def vp (AliceDoc.value-str doc (rw))
+    clip `${ind}${mk}${kp}${vp}` (xoff) (width)
+  ]
+]
+
+def row-style fn [
+  [rw:Map focused:Boolean] [Map] [
+    if (focused) [ {reverse: true} ] [
+      if ((rw get "kind") eq "leaf") [ {} ] [ {fg: "cyan"} ]
+    ]
+  ]
+]
+
+def tree-pane fn [
+  [tab:Map vh:Integer width:Integer] [Map] [
+    def rows (tab get "rows")
+    def n (size (rows))
+    def sc (tab get "scroll")
+    def fin (MathUtil.min (n) ((sc) add (vh)))
+    def lines (each [ var [[j]
+      def rw (rows get (j))
+      (Tui.text (row-line (tab get "doc") (rw) (tab get "xoff") (width))
+                {style: (row-style (rw) ((j) eq (tab get "focus"))), size: 1})
+    ]] (range (sc) (fin) 1))
+    Tui.rows (flatten [ (lines) [(Tui.spacer)] ])
+  ]
+]
+
+
+# --- chrome ----------------------------------------------------------
+
+def tab-mark fn [
+  [tb:Map] [String] [
+    def w (if ((tb get "watch") otherwise false) [ "*" ] [ "" ])
+    def e (if (((tb get "err") otherwise none) is None) [ "" ] [ "!" ])
+    def g (if ((tb get "gone") otherwise false) [ "✗" ] [ "" ])
+    `${w}${e}${g}`
+  ]
+]
+
+def tab-strip fn [
+  [state:Map] [Map] [
+    def tabs (state get "tabs")
+    def cells (each [ var [[i]
+      def tb (tabs get (i))
+      def nm (last-part "/" (tb get "path"))
+      (Tui.text ` ${(i) add 1}:${nm}${(tab-mark (tb))} `
+                {style: (if ((i) eq (state get "active")) [ {reverse: true} ] [ {fg: "grey"} ]), size: "fit"})
+    ]] (range 0 (size (tabs)) 1))
+    Tui.cols (flatten [ (cells) [(Tui.spacer)] ]) {size: 1}
+  ]
+]
+
+def status-bar fn [
+  [state:Map tab:Map] [Map] [
+    def rows (tab get "rows")
+    def fx (tab get "focus")
+    def pth (if ((size (rows)) gt 0) [ AliceDoc.path-str ((rows get (fx)) get "path") ] [ "" ])
+    def er ((tab get "err") otherwise none)
+    def estr (if ((er) is None) [ "" ] [ ` · error: ${er}` ])
+    def gstr (if ((tab get "gone") otherwise false) [ " · file gone" ] [ "" ])
+    def wstr (if ((tab get "watch") otherwise false) [ " · watching" ] [ "" ])
+    def msg ((state get "msg") otherwise "")
+    def mstr (if ((msg) eq "") [ "" ] [ ` · ${msg}` ])
+    Tui.text `${pth} · ${(tab get "kind")}${wstr}${estr}${gstr}${mstr}` {style: {fg: "grey"}, size: 1}
+  ]
+]
+
+def bottom-bar fn [
+  [state:Map] [Map] [
+    def mode (state get "mode")
+    if (((mode) eq "command") or ((mode) eq "search")) [
+      Tui.box ((state get "cmd") set focus true) {size: 1}
+    ] [
+      Tui.text " j/k move · h/l fold · space toggle · / search · : cmd · ? help · q quit"
+               {style: {fg: "grey"}, size: 1}
+    ]
+  ]
+]
+
+def help-pane fn [
+  [] [Map] [
+    def lines [
+      "alice — an aql file viewer (jless-style)"
+      ""
+      "  j k / arrows   move focus        l / right   expand · first child"
+      "  h / left       collapse · parent H           parent (no collapse)"
+      "  J K            next/prev sibling w b         next/prev depth change"
+      "  space          toggle fold      c e E        collapse / expand / deep"
+      "  g G            first / last     0 $          first / last sibling"
+      "  C-f C-b C-d C-u  page moves     C-e C-y      scroll without focus"
+      "  z then z/t/b   center/top/bottom . ,         value horizontal scroll"
+      "  / text         search           n N          next / prev match"
+      "  * "
+      "  tab / backtab  switch tab       W            toggle watch on tab"
+      "  r              reload tab       y            print path+value to status"
+      "  :open PATH [KIND] · :close · :tab N · :next · :prev"
+      "  :watch on|off · :help · :quit"
+      ""
+      "  any key returns to the tree"
+    ]
+    def widgets (each [ var [[s] (Tui.text (s) {size: 1}) ]] (lines))
+    Tui.rows (flatten [ (widgets) [(Tui.spacer)] ])
+  ]
+]
+
+
+# --- the screen ------------------------------------------------------
+
+def render fn [
+  [state:Map] [Map] [
+    def tab ((state get "tabs") get (state get "active"))
+    def dim (state get "dim")
+    def w ((dim get "cols") otherwise 80)
+    def hh ((dim get "rows") otherwise 24)
+    def vh (MathUtil.max 1 ((hh) sub 3))
+    # Branch on the whole widget list rather than binding the middle
+    # pane from the `if`: an if-bound user-fn result consumed as a list
+    # element is the one shape the bytecode emitter refuses ("fn call
+    # operand of unknown provenance") — with the branch at this level,
+    # the entire app compiles (dx-report, bytecode status).
+    if ((state get "mode") eq "help") [
+      Tui.rows [
+        (tab-strip (state))
+        (help-pane)
+        (status-bar (state) (tab))
+        (bottom-bar (state))
+      ]
+    ] [
+      Tui.rows [
+        (tab-strip (state))
+        (tree-pane (tab) (vh) (w))
+        (status-bar (state) (tab))
+        (bottom-bar (state))
+      ]
+    ]
+  ]
+]
+
+
+export "AliceView" {
+  render: render/r
+  row-line: row-line/r
+}

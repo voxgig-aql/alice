@@ -1,0 +1,168 @@
+# alice viewer: unit tests for alice-tabs.aql (tab set + reload
+# re-anchor).
+#
+# Run from the repo root:
+#   aql test/alice_tabs_unit_test.aql
+
+
+import "aql:test" end
+import "./alice-doc.aql" end
+import "./alice-nav.aql" end
+import "./alice-tabs.aql" end
+
+
+def _vh 5
+
+# A minimal state map around a list of tabs.
+def _mk-state fn [
+  [] [Map] [
+    def s0 {tabs: [], active: 0, next: 1, mode: "browse", msg: ""}
+    def s1 (AliceTabs.open (s0) "test/fixtures/sample.json" {})
+    s1
+  ]
+]
+
+# A synthetic load result, as AliceFmt.load would return it.
+def _ok-res fn [
+  [doc:Any] [Map] [
+    def out {ok: true, doc: (doc), kind: "json", text: false, err: none, code: none}
+    out
+  ]
+]
+
+
+# --- open / close / activate ----------------------------------------
+
+[
+  def s (_mk-state)
+  1 (size (s get "tabs")) Assert.equal end
+  0 (s get "active") Assert.equal end
+  2 (s get "next") Assert.equal end
+  def tb (AliceTabs.active (s))
+  "json" (tb get "kind") Assert.equal end
+  true ((tb get "err") is None) Assert.equal end
+  3 (size (tb get "rows")) Assert.equal end
+] "open-first-tab" Test.test end
+
+[
+  def s (_mk-state)
+  def s2 (AliceTabs.open (s) "test/fixtures/sample.csv" {})
+  2 (size (s2 get "tabs")) Assert.equal end
+  1 (s2 get "active") Assert.equal end
+  "csv" ((AliceTabs.active (s2)) get "kind") Assert.equal end
+  def s3 (AliceTabs.next (s2))
+  0 (s3 get "active") Assert.equal end
+  def s4 (AliceTabs.prev (s3))
+  1 (s4 get "active") Assert.equal end
+  def s5 (AliceTabs.activate (s4) 0)
+  0 (s5 get "active") Assert.equal end
+  def s6 (AliceTabs.activate (s5) 99)
+  1 (s6 get "active") Assert.equal end
+] "open-switch-tabs" Test.test end
+
+[
+  def s (_mk-state)
+  def s2 (AliceTabs.open (s) "test/fixtures/sample.csv" {})
+  def s3 (AliceTabs.close (s2))
+  1 (size (s3 get "tabs")) Assert.equal end
+  0 (s3 get "active") Assert.equal end
+  "json" ((AliceTabs.active (s3)) get "kind") Assert.equal end
+  def s4 (AliceTabs.close (s3))
+  0 (size (s4 get "tabs")) Assert.equal end
+] "close-tabs" Test.test end
+
+[
+  def s (_mk-state)
+  def tb ((AliceTabs.active (s)) set focus 2)
+  def s2 (AliceTabs.put-active (s) (tb))
+  2 ((AliceTabs.active (s2)) get "focus") Assert.equal end
+  1 (size (s2 get "tabs")) Assert.equal end
+] "put-active" Test.test end
+
+[
+  def s0 {tabs: [], active: 0, next: 1, mode: "browse", msg: ""}
+  def s (AliceTabs.open (s0) "test/fixtures/no-such.json" {})
+  def tb (AliceTabs.active (s))
+  false ((tb get "err") is None) Assert.equal end
+  1 (size (tb get "rows")) Assert.equal end
+] "open-missing-file-keeps-tab" Test.test end
+
+
+# --- reanchor: same structure, focus survives exactly ---------------
+
+def _doc-a {a: {b: {c: 1, d: 2}}, e: [10, 20, 30], f: "s"}
+def _doc-a2 {a: {b: {c: 99, d: 2}}, e: [10, 20, 30], f: "s"}
+
+# Build a tab over docA with a/b expanded and focus on .a.b.d.
+def _tab-a fn [
+  [] [Map] [
+    def tb0 (AliceTabs.make 1 "mem.json" {kind: "json"})
+    def rows0 (AliceDoc.top (_doc-a))
+    def rows1 (AliceDoc.expand (_doc-a) (rows0) 1)
+    def rows2 (AliceDoc.expand (_doc-a) (rows1) 2)
+    def tb1 ((((tb0) set doc (_doc-a)) set rows (rows2)) set focus 4
+    )
+    (tb1) set scroll 1
+  ]
+]
+
+[
+  def tb (_tab-a)
+  "d" (((tb get "rows") get (tb get "focus")) get "key") Assert.equal end
+  def tb2 (AliceTabs.reanchor (tb) (_ok-res (_doc-a2)) (_vh))
+  true ((tb2 get "err") is None) Assert.equal end
+  # same path focused, same screen line (focus - scroll)
+  "d" (((tb2 get "rows") get (tb2 get "focus")) get "key") Assert.equal end
+  true ((AliceDoc.value-at (tb2 get "doc") ["a", "b", "c"]) eq 99) Assert.equal end
+  ((tb get "focus") sub (tb get "scroll"))
+    ((tb2 get "focus") sub (tb2 get "scroll")) Assert.equal end
+  1 ((tb2 get "gen")) Assert.equal end
+] "reanchor-exact-path" Test.test end
+
+
+# --- reanchor: focused subtree deleted → nearest surviving ancestor --
+
+def _doc-b {a: {b: {c: 1, d: 2}}, e: [10, 20, 30], f: "s"}
+def _doc-b2 {a: {x: 5}, e: [10, 20, 30], f: "s"}
+
+[
+  def tb (_tab-a)
+  def tb2 (AliceTabs.reanchor ((tb) set doc (_doc-b)) (_ok-res (_doc-b2)) (_vh))
+  # .a.b.d is gone; the nearest surviving ancestor is .a
+  "a" (((tb2 get "rows") get (tb2 get "focus")) get "key") Assert.equal end
+  true (((tb2 get "rows") get (tb2 get "focus")) get "open") Assert.equal end
+] "reanchor-ancestor-fallback" Test.test end
+
+
+# --- reanchor: parse failure keeps the old view + records the error --
+
+[
+  def tb (_tab-a)
+  def bad {ok: false, doc: none, kind: "json", text: false, err: "boom", code: "read_error"}
+  def tb2 (AliceTabs.reanchor (tb) (bad) (_vh))
+  "boom" (tb2 get "err") Assert.equal end
+  true ((tb2 get "rows") deq (tb get "rows")) Assert.equal end
+  4 (tb2 get "focus") Assert.equal end
+  1 (tb2 get "gen") Assert.equal end
+] "reanchor-error-keeps-view" Test.test end
+
+
+# --- reanchor: expansion set filtered to survivors -------------------
+
+[
+  def tb (_tab-a)
+  def tb2 (AliceTabs.reanchor (tb) (_ok-res (_doc-b2)) (_vh))
+  # .a.b no longer exists, so it cannot linger in the expansion set:
+  # re-collapsing and re-expanding .a shows only the new child x
+  def rows (tb2 get "rows")
+  -1 (AliceNav.index-of (tb2) ["a", "b"]) Assert.equal end
+  true ((AliceNav.index-of (tb2) ["a", "x"]) gte 0) Assert.equal end
+] "reanchor-filters-expansions" Test.test end
+
+
+# --- summary --------------------------------------------------------
+
+"---" print
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
+"all green" print
