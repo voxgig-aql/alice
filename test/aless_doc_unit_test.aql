@@ -26,13 +26,13 @@ def _many (iota 600 each [ var [[i] "match-me" ] ])
   true  ((rows get 0) get "open") Assert.equal end
   "map" ((rows get 0) get "kind") Assert.equal end
   0     (size ((rows get 0) get "path")) Assert.equal end
-  "meta" ((rows get 1) get "key") Assert.equal end
-  "map"  ((rows get 1) get "kind") Assert.equal end
-  2      ((rows get 1) get "n") Assert.equal end
-  "name" ((rows get 2) get "key") Assert.equal end
-  "leaf" ((rows get 2) get "kind") Assert.equal end
-  "tags" ((rows get 3) get "key") Assert.equal end
-  "list" ((rows get 3) get "kind") Assert.equal end
+  "name" ((rows get 1) get "key") Assert.equal end
+  "leaf" ((rows get 1) get "kind") Assert.equal end
+  "tags" ((rows get 2) get "key") Assert.equal end
+  "list" ((rows get 2) get "kind") Assert.equal end
+  "meta" ((rows get 3) get "key") Assert.equal end
+  "map"  ((rows get 3) get "kind") Assert.equal end
+  2      ((rows get 3) get "n") Assert.equal end
 ] "top-shape" Test.test end
 
 
@@ -49,13 +49,13 @@ def _many (iota 600 each [ var [[i] "match-me" ] ])
 
 [
   def rows (AlessDoc.top (_doc))
-  def rows2 (AlessDoc.expand (_doc) (rows) 1)
+  def rows2 (AlessDoc.expand (_doc) (rows) 3)
   6 (size (rows2)) Assert.equal end
-  true ((rows2 get 1) get "open") Assert.equal end
-  "age" ((rows2 get 2) get "key") Assert.equal end
-  2     ((rows2 get 2) get "depth") Assert.equal end
-  "ok"  ((rows2 get 3) get "key") Assert.equal end
-  "name" ((rows2 get 4) get "key") Assert.equal end
+  true ((rows2 get 3) get "open") Assert.equal end
+  "age" ((rows2 get 4) get "key") Assert.equal end
+  2     ((rows2 get 4) get "depth") Assert.equal end
+  "ok"  ((rows2 get 5) get "key") Assert.equal end
+  "name" ((rows2 get 1) get "key") Assert.equal end
 ] "expand-splice" Test.test end
 
 
@@ -63,8 +63,8 @@ def _many (iota 600 each [ var [[i] "match-me" ] ])
 
 [
   def rows (AlessDoc.top (_doc))
-  def rows2 (AlessDoc.expand (_doc) (rows) 1)
-  true ((AlessDoc.expand (_doc) (rows2) 1) deq (rows2)) Assert.equal end
+  def rows2 (AlessDoc.expand (_doc) (rows) 3)
+  true ((AlessDoc.expand (_doc) (rows2) 3) deq (rows2)) Assert.equal end
   true ((AlessDoc.expand (_doc) (rows2) 4) deq (rows2)) Assert.equal end
 ] "expand-noop" Test.test end
 
@@ -73,10 +73,10 @@ def _many (iota 600 each [ var [[i] "match-me" ] ])
 
 [
   def rows (AlessDoc.top (_doc))
-  def rows2 (AlessDoc.expand (_doc) (rows) 1)
-  def rows3 (AlessDoc.collapse (rows2) 1)
+  def rows2 (AlessDoc.expand (_doc) (rows) 3)
+  def rows3 (AlessDoc.collapse (rows2) 3)
   true ((rows3) deq (rows)) Assert.equal end
-  true ((AlessDoc.collapse (rows3) 1) deq (rows)) Assert.equal end
+  true ((AlessDoc.collapse (rows3) 3) deq (rows)) Assert.equal end
 ] "collapse-inverts" Test.test end
 
 
@@ -84,10 +84,10 @@ def _many (iota 600 each [ var [[i] "match-me" ] ])
 
 [
   def rows (AlessDoc.top (_doc))
-  def rows2 (AlessDoc.expand (_doc) (rows) 1)
-  4 (AlessDoc.subtree-end (rows2) 1) Assert.equal end
+  def rows2 (AlessDoc.expand (_doc) (rows) 3)
+  6 (AlessDoc.subtree-end (rows2) 3) Assert.equal end
   6 (AlessDoc.subtree-end (rows2) 0) Assert.equal end
-  3 (AlessDoc.subtree-end (rows2) 2) Assert.equal end
+  2 (AlessDoc.subtree-end (rows2) 1) Assert.equal end
   6 (AlessDoc.subtree-end (rows2) 5) Assert.equal end
 ] "subtree-end" Test.test end
 
@@ -96,7 +96,7 @@ def _many (iota 600 each [ var [[i] "match-me" ] ])
 
 [
   def rows (AlessDoc.top (_doc))
-  def ks (AlessDoc.kids (_doc) (rows get 3))
+  def ks (AlessDoc.kids (_doc) (rows get 2))
   2 (size (ks)) Assert.equal end
   0 ((ks get 0) get "key") Assert.equal end
   1 ((ks get 1) get "key") Assert.equal end
@@ -149,21 +149,21 @@ def _many (iota 600 each [ var [[i] "match-me" ] ])
 
 [
   def rows (AlessDoc.top (_doc))
-  def rows2 (AlessDoc.expand (_doc) (rows) 1)
+  def rows2 (AlessDoc.expand (_doc) (rows) 3)
   "" (AlessDoc.key-str (rows2 get 0)) Assert.equal end
-  "meta" (AlessDoc.key-str (rows2 get 1)) Assert.equal end
-  def ks (AlessDoc.kids (_doc) (rows2 get 5))
+  "meta" (AlessDoc.key-str (rows2 get 3)) Assert.equal end
+  def ks (AlessDoc.kids (_doc) (rows2 get 2))
   "[0]" (AlessDoc.key-str (ks get 0)) Assert.equal end
 ] "key-str" Test.test end
 
 [
   def rows (AlessDoc.top (_doc))
-  def rows2 (AlessDoc.expand (_doc) (rows) 1)
-  "{…} 2 keys" (AlessDoc.value-str (_doc) (rows2 get 1)) Assert.equal end
-  "[…] 2 items" (AlessDoc.value-str (_doc) (rows2 get 5)) Assert.equal end
-  "36" (AlessDoc.value-str (_doc) (rows2 get 2)) Assert.equal end
-  "true" (AlessDoc.value-str (_doc) (rows2 get 3)) Assert.equal end
-  "'ada'" (AlessDoc.value-str (_doc) (rows2 get 4)) Assert.equal end
+  def rows2 (AlessDoc.expand (_doc) (rows) 3)
+  "{…} 2 keys" (AlessDoc.value-str (_doc) (rows2 get 3)) Assert.equal end
+  "[…] 2 items" (AlessDoc.value-str (_doc) (rows2 get 2)) Assert.equal end
+  "36" (AlessDoc.value-str (_doc) (rows2 get 4)) Assert.equal end
+  "true" (AlessDoc.value-str (_doc) (rows2 get 5)) Assert.equal end
+  "'ada'" (AlessDoc.value-str (_doc) (rows2 get 1)) Assert.equal end
 ] "value-str" Test.test end
 
 
@@ -203,8 +203,8 @@ def _many (iota 600 each [ var [[i] "match-me" ] ])
 
 [
   def rows (AlessDoc.top (_doc))
-  def rows2 (AlessDoc.expand (_doc) (rows) 1)
-  def rows3 (AlessDoc.expand (_doc) (rows2) 5)
+  def rows2 (AlessDoc.expand (_doc) (rows) 3)
+  def rows3 (AlessDoc.expand (_doc) (rows2) 2)
   def exps (AlessDoc.expanded-of (rows3))
   def rebuilt (AlessDoc.rebuild (_doc) (exps))
   true ((rebuilt) deq (rows3)) Assert.equal end
