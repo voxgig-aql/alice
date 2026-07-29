@@ -195,7 +195,9 @@ def subtree-end fn [
 def expand fn [
   [doc:Any rows:List ix:Integer] [List] [
     def r (rows get ix)
-    if ((r get "open") or ((r get "kind") eq "leaf")) [ (rows) ] [
+    # Out-of-range ix (r is None) is a no-op — nothing to expand. (collapse's
+    # `not` already short-circuits None; expand's `or` does not.)
+    if ((r deq None) or (r get "open") or ((r get "kind") eq "leaf")) [ (rows) ] [
       def r2 (r set open true)
       flatten [ (take ix rows) [(r2)] (kids doc (r)) (shed (ix add 1) rows) ]
     ]
